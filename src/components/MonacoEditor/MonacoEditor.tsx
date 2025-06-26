@@ -57,7 +57,7 @@ function EditorX<ValueType = unknown>(
       return {
         editor: editorRef.current,
         monaco: monacoRef.current,
-        getDeserializeValue: () => deserialize(editorRef.current?.getValue()),
+        getDeserializeValue: () => deserialize(editorRef.current?.getValue()) as ValueType,
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
