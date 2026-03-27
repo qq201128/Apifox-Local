@@ -1,9 +1,11 @@
 import { Form, Tabs, theme, Typography } from 'antd'
 
-import type { ApiDetails } from '@/types'
+import type { ApiDetails, ProjectEnvironmentConfig } from '@/types'
 
 import { ParamsEditableTable } from '../components/ParamsEditableTable'
 
+import { GlobalParametersNotice } from './GlobalParametersNotice'
+import { ParamsAuth } from './ParamsAuth'
 import { ParamsBody } from './ParamsBody'
 
 function BadgeLabel(props: React.PropsWithChildren<{ count?: number }>) {
@@ -31,14 +33,26 @@ function BadgeLabel(props: React.PropsWithChildren<{ count?: number }>) {
 
 interface ParamsTabProps {
   value?: ApiDetails['parameters']
+  globalParameters?: ProjectEnvironmentConfig['globalParameters']
   onChange?: (value: ParamsTabProps['value']) => void
+}
+
+function getParamNameSet(params?: Array<{ name?: string, enable?: boolean }>) {
+  return new Set(
+    (params ?? [])
+      .filter((item) => item.name && item.enable !== false)
+      .map((item) => item.name as string),
+  )
 }
 
 /**
  * 请求参数页签。
  */
 export function ParamsTab(props: ParamsTabProps) {
-  const { value, onChange } = props
+  const { value, globalParameters, onChange } = props
+  const queryNames = getParamNameSet(value?.query)
+  const headerNames = new Set(Array.from(getParamNameSet(value?.header)).map(name => name.toLowerCase()))
+  const cookieNames = getParamNameSet(value?.cookie)
 
   return (
     <Tabs
@@ -53,6 +67,11 @@ export function ParamsTab(props: ParamsTabProps) {
           ),
           children: (
             <div>
+              <GlobalParametersNotice
+                overriddenNames={queryNames}
+                rows={globalParameters?.query}
+                title="当前全局 Query 参数"
+              />
               <div className="py-2">
                 <Typography.Text type="secondary">Query 参数</Typography.Text>
               </div>
@@ -90,7 +109,7 @@ export function ParamsTab(props: ParamsTabProps) {
           label: 'Body',
           children: (
             <Form.Item noStyle name="requestBody">
-              <ParamsBody />
+              <ParamsBody globalRows={globalParameters?.body} />
             </Form.Item>
           ),
         },
@@ -100,6 +119,12 @@ export function ParamsTab(props: ParamsTabProps) {
           label: 'Headers',
           children: (
             <div className="pt-2">
+              <GlobalParametersNotice
+                overriddenNames={headerNames}
+                normalizeName={name => name.toLowerCase()}
+                rows={globalParameters?.header}
+                title="当前全局 Header 参数"
+              />
               <ParamsEditableTable
                 value={value?.header}
                 onChange={(header) => {
@@ -115,6 +140,11 @@ export function ParamsTab(props: ParamsTabProps) {
           label: 'Cookie',
           children: (
             <div className="pt-2">
+              <GlobalParametersNotice
+                overriddenNames={cookieNames}
+                rows={globalParameters?.cookie}
+                title="当前全局 Cookie 参数"
+              />
               <ParamsEditableTable
                 value={value?.cookie}
                 onChange={(cookie) => {
@@ -122,6 +152,16 @@ export function ParamsTab(props: ParamsTabProps) {
                 }}
               />
             </div>
+          ),
+        },
+
+        {
+          key: 'auth',
+          label: 'Auth',
+          children: (
+            <Form.Item noStyle name="auth">
+              <ParamsAuth />
+            </Form.Item>
           ),
         },
       ]}

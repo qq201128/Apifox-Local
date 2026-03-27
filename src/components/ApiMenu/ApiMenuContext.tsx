@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useState } from 'react'
 
-import { initialExpandedKeys } from '@/data/remote'
+import { CatalogType } from '@/enums'
 
 import { type MenuState, useMenuData } from './api-menu-data'
 
@@ -18,7 +18,11 @@ const ApiMenuContext = createContext({} as ApiMenuContextData)
 export function ApiMenuContextProvider(props: React.PropsWithChildren) {
   const { children } = props
 
-  const [expandedMenuKeys, setExpandedMenuKeys] = useState<string[]>(initialExpandedKeys)
+  const [expandedMenuKeys, setExpandedMenuKeys] = useState<string[]>([
+    CatalogType.Http,
+    CatalogType.Schema,
+    CatalogType.Request,
+  ])
 
   const expandHelpers = useMemo<ExpandedMenuKeysHelpers>(() => {
     return {

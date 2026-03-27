@@ -1,10 +1,9 @@
 import { show } from '@ebay/nice-modal-react'
 import { Button, type ButtonProps, Space } from 'antd'
-import { ArrowLeftToLine, ArrowRightToLine, GithubIcon, ShirtIcon } from 'lucide-react'
+import { ArrowLeftToLine, ArrowRightToLine, ShirtIcon } from 'lucide-react'
 
 import { IconText } from '@/components/IconText'
 import { ModalSettings, SettingsMenuKey } from '@/components/modals/ModalSettings'
-import { GitHubRepo } from '@/constants'
 import { useLayoutContext } from '@/contexts/layout-settings'
 
 function SmallButton({ children, ...props }: React.PropsWithChildren<ButtonProps>) {
@@ -47,10 +46,6 @@ export function FooterBar() {
           }}
         >
           <IconText icon={<ShirtIcon size={14} />} />
-        </SmallButton>
-
-        <SmallButton href={GitHubRepo} target="_blank">
-          <IconText icon={<GithubIcon size={14} />} />
         </SmallButton>
       </Space>
     </div>

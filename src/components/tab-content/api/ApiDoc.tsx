@@ -13,9 +13,13 @@ import { useGlobalContext } from '@/contexts/global'
 import { useMenuHelpersContext } from '@/contexts/menu-helpers'
 import { creator } from '@/data/remote'
 import { useStyles } from '@/hooks/useStyle'
+import { BodyType } from '@/enums'
+import { SchemaType, type JsonSchema } from '@/components/JsonSchema'
 import type { ApiDetails, Parameter } from '@/types'
 
 import { css } from '@emotion/css'
+
+import { useApiRequestRunner } from './useApiRequestRunner'
 
 const statusOptions: SelectProps['options'] = Object.entries(API_STATUS_CONFIG).map(
   ([method, { text, color }]) => {
@@ -126,12 +130,142 @@ function ApiParameter({ param }: { param: Parameter }) {
   )
 }
 
+function normalizeSchemaForDisplay(input: unknown): unknown {
+  if (Array.isArray(input)) {
+    return input.map(normalizeSchemaForDisplay)
+  }
+
+  if (!input || typeof input !== 'object') {
+    return input
+  }
+
+  const schema = input as Record<string, unknown>
+  const normalized: Record<string, unknown> = {}
+
+  Object.entries(schema).forEach(([key, value]) => {
+    if (key === 'properties' && Array.isArray(value)) {
+      const propertyObject: Record<string, unknown> = {}
+
+      value.forEach((item) => {
+        if (!item || typeof item !== 'object') {
+          return
+        }
+
+        const prop = item as Record<string, unknown>
+        const propName = typeof prop.name === 'string' ? prop.name : undefined
+
+        if (!propName) {
+          return
+        }
+
+        const rest = { ...prop }
+        delete rest.name
+        propertyObject[propName] = normalizeSchemaForDisplay(rest)
+      })
+
+      normalized[key] = propertyObject
+      return
+    }
+
+    normalized[key] = normalizeSchemaForDisplay(value)
+  })
+
+  return normalized
+}
+
+interface SchemaFieldRow {
+  key: string
+  name: string
+  typeLabel: string
+  description?: string
+  depth: number
+}
+
+function getTypeLabel(node: JsonSchema): string {
+  if (node.type === SchemaType.Array) {
+    const itemType = getTypeLabel(node.items)
+    return `array<${itemType}>`
+  }
+
+  return node.type
+}
+
+function buildSchemaRows(schema?: JsonSchema): SchemaFieldRow[] {
+  if (!schema || schema.type !== SchemaType.Object || !Array.isArray(schema.properties)) {
+    return []
+  }
+
+  const rows: SchemaFieldRow[] = []
+
+  const walk = (properties: JsonSchema[], depth: number) => {
+    properties.forEach((field, index) => {
+      const name = field.name ?? `field_${index + 1}`
+      const key = `${depth}-${name}-${index}`
+
+      rows.push({
+        key,
+        name,
+        typeLabel: getTypeLabel(field),
+        description: field.description,
+        depth,
+      })
+
+      if (field.type === SchemaType.Object && Array.isArray(field.properties)) {
+        walk(field.properties, depth + 1)
+      }
+
+      if (field.type === SchemaType.Array && field.items.type === SchemaType.Object && Array.isArray(field.items.properties)) {
+        walk(field.items.properties, depth + 1)
+      }
+    })
+  }
+
+  walk(schema.properties, 0)
+  return rows
+}
+
+function buildSchemaExample(schema?: JsonSchema): unknown {
+  if (!schema) {
+    return {}
+  }
+
+  switch (schema.type) {
+    case SchemaType.String:
+      return 'string'
+    case SchemaType.Integer:
+      return 0
+    case SchemaType.Number:
+      return 0
+    case SchemaType.Boolean:
+      return true
+    case SchemaType.Null:
+      return null
+    case SchemaType.Refer:
+      return {}
+    case SchemaType.Array:
+      return [buildSchemaExample(schema.items)]
+    case SchemaType.Object: {
+      const output: Record<string, unknown> = {}
+
+      schema.properties?.forEach((field, index) => {
+        const fieldName = field.name ?? `field_${index + 1}`
+        output[fieldName] = buildSchemaExample(field)
+      })
+
+      return output
+    }
+    default:
+      return {}
+  }
+}
+
 export function ApiDoc() {
   const { token } = theme.useToken()
 
   const { messageApi } = useGlobalContext()
   const { menuRawList } = useMenuHelpersContext()
   const { tabData } = useTabContentContext()
+  const { run, running } = useApiRequestRunner()
 
   const { docValue, methodConfig } = useMemo(() => {
     const apiDetails = menuRawList?.find(({ id }) => id === tabData.key)?.data as
@@ -172,6 +306,131 @@ export function ApiDoc() {
           borderBottomRightRadius: token.borderRadius,
         },
       }),
+
+      requestBodySchema: css({
+        marginTop: token.marginSM,
+        border: `1px solid ${token.colorBorderSecondary}`,
+        borderRadius: token.borderRadiusLG,
+        overflow: 'hidden',
+
+        '.schema-header': {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: `${token.paddingXS}px ${token.paddingSM}px`,
+          background: token.colorFillSecondary,
+          borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          fontSize: token.fontSizeSM,
+          color: token.colorTextSecondary,
+        },
+
+        '.schema-layout': {
+          display: 'grid',
+          gridTemplateColumns: 'minmax(440px, 1fr) minmax(280px, 0.9fr)',
+          minHeight: 380,
+          background: token.colorBgContainer,
+        },
+
+        '.schema-panel': {
+          minWidth: 0,
+        },
+
+        '.schema-panel + .schema-panel': {
+          borderLeft: `1px solid ${token.colorBorderSecondary}`,
+        },
+
+        '.schema-sub-title': {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: `${token.paddingXS}px ${token.paddingSM}px`,
+          borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          color: token.colorTextSecondary,
+          fontSize: token.fontSizeSM,
+          background: token.colorFillTertiary,
+        },
+
+        '.schema-table-head, .schema-row': {
+          display: 'grid',
+          gridTemplateColumns: '2.2fr 1.3fr 0.8fr 2fr',
+          gap: token.paddingXS,
+          padding: `${token.paddingXXS}px ${token.paddingSM}px`,
+          alignItems: 'center',
+        },
+
+        '.schema-table-head': {
+          position: 'sticky',
+          top: 0,
+          zIndex: 1,
+          background: token.colorFillSecondary,
+          color: token.colorTextSecondary,
+          fontSize: 12,
+          borderBottom: `1px solid ${token.colorBorderSecondary}`,
+        },
+
+        '.schema-rows': {
+          maxHeight: 335,
+          overflow: 'auto',
+        },
+
+        '.schema-row': {
+          color: token.colorText,
+          borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          minHeight: 36,
+        },
+
+        '.schema-field-name': {
+          display: 'inline-flex',
+          alignItems: 'center',
+          padding: '2px 8px',
+          borderRadius: token.borderRadius,
+          background: token.colorPrimaryBg,
+          color: token.colorPrimary,
+          maxWidth: '100%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        },
+
+        '.schema-type-text': {
+          color: token.colorTextSecondary,
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        },
+
+        '.schema-required': {
+          color: token.colorTextTertiary,
+          fontSize: 12,
+        },
+
+        '.schema-required.is-required': {
+          color: token.colorError,
+        },
+
+        '.schema-desc': {
+          color: token.colorTextDescription,
+          fontSize: 12,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        },
+
+        '.schema-empty': {
+          color: token.colorTextTertiary,
+          padding: token.paddingSM,
+          fontSize: 12,
+        },
+
+        '.schema-code': {
+          margin: 0,
+          padding: token.paddingSM,
+          background: token.colorBgLayout,
+          color: token.colorText,
+          fontSize: 12,
+          lineHeight: 1.7,
+          maxHeight: 335,
+          overflow: 'auto',
+        },
+      }),
     }
   })
 
@@ -183,10 +442,21 @@ export function ApiDoc() {
     = Array.isArray(docValue.parameters?.path) && docValue.parameters.path.length > 0
   const hasQueryParams
     = Array.isArray(docValue.parameters?.query) && docValue.parameters.query.length > 0
-  const hasParams = hasPathParams || hasQueryParams
+  const hasHeaderParams
+    = Array.isArray(docValue.parameters?.header) && docValue.parameters.header.length > 0
+  const hasCookieParams
+    = Array.isArray(docValue.parameters?.cookie) && docValue.parameters.cookie.length > 0
+  const hasParams = hasPathParams || hasQueryParams || hasHeaderParams || hasCookieParams
 
   const pathParams = docValue.parameters?.path
   const queryParams = docValue.parameters?.query
+  const headerParams = docValue.parameters?.header
+  const cookieParams = docValue.parameters?.cookie
+  const normalizedRequestSchema = docValue.requestBody?.jsonSchema
+    ? normalizeSchemaForDisplay(docValue.requestBody.jsonSchema)
+    : undefined
+  const requestSchemaRows = buildSchemaRows(docValue.requestBody?.jsonSchema)
+  const requestSchemaExample = buildSchemaExample(docValue.requestBody?.jsonSchema)
 
   return (
     <div className="h-full overflow-auto p-tabContent">
@@ -212,7 +482,13 @@ export function ApiDoc() {
         </Space>
 
         <Space className="ml-auto pl-2">
-          <Button type="primary">
+          <Button
+            loading={running}
+            type="primary"
+            onClick={() => {
+              void run(docValue)
+            }}
+          >
             <IconText icon={<ZapIcon size={14} />} text="运行" />
           </Button>
 
@@ -234,7 +510,22 @@ export function ApiDoc() {
         >
           {docValue.method}
         </span>
-        <span className="mr-2">{docValue.path}</span>
+        <Tooltip title="点击复制接口地址">
+          <span
+            className="mr-2 cursor-pointer underline-offset-2 hover:underline"
+            onClick={() => {
+              if (!docValue.path) {
+                return
+              }
+
+              void navigator.clipboard.writeText(docValue.path).then(() => {
+                messageApi.success('接口地址已复制')
+              })
+            }}
+          >
+            {docValue.path}
+          </span>
+        </Tooltip>
         <Select options={statusOptions} value={docValue.status} variant="borderless" />
       </div>
 
@@ -297,10 +588,92 @@ export function ApiDoc() {
                     </div>
                   </Card>
                 )}
+
+                {hasHeaderParams && (
+                  <Card className={styles.card} title="Header 参数">
+                    <div className="flex flex-col gap-3">
+                      {headerParams?.map((param) => <ApiParameter key={param.id} param={param} />)}
+                    </div>
+                  </Card>
+                )}
+
+                {hasCookieParams && (
+                  <Card className={styles.card} title="Cookie 参数">
+                    <div className="flex flex-col gap-3">
+                      {cookieParams?.map((param) => <ApiParameter key={param.id} param={param} />)}
+                    </div>
+                  </Card>
+                )}
               </div>
             )
           : (
               '无'
+            )}
+      </div>
+
+      <div>
+        <GroupTitle>请求 Body</GroupTitle>
+        {!docValue.requestBody || docValue.requestBody.type === BodyType.None
+          ? (
+              '无'
+            )
+          : (
+              <Card className={styles.card} title={docValue.requestBody.type}>
+                {docValue.requestBody.parameters && docValue.requestBody.parameters.length > 0 && (
+                  <div className="mb-3 flex flex-col gap-3">
+                    {docValue.requestBody.parameters.map((param) => (
+                      <ApiParameter key={param.id} param={param} />
+                    ))}
+                  </div>
+                )}
+
+                {normalizedRequestSchema !== undefined && normalizedRequestSchema !== null && (
+                  <div className={styles.requestBodySchema}>
+                    <div className="schema-header">
+                      <span>application/json</span>
+                      <span>Body 参数</span>
+                    </div>
+                    <div className="schema-layout">
+                      <div className="schema-panel">
+                        <div className="schema-sub-title">
+                          <span>参数结构</span>
+                          <span>{requestSchemaRows.length} fields</span>
+                        </div>
+                        <div className="schema-table-head">
+                          <span>字段名</span>
+                          <span>类型</span>
+                          <span>必填</span>
+                          <span>说明</span>
+                        </div>
+                        <div className="schema-rows">
+                          {requestSchemaRows.length > 0
+                            ? requestSchemaRows.map((row) => (
+                                <div key={row.key} className="schema-row">
+                                  <span style={{ paddingLeft: row.depth * 16 }}>
+                                    <span className="schema-field-name">{row.name}</span>
+                                  </span>
+                                  <span className="schema-type-text">{row.typeLabel}</span>
+                                  <span className="schema-required">可选</span>
+                                  <span className="schema-desc">{row.description ?? '-'}</span>
+                                </div>
+                              ))
+                            : <div className="schema-empty">暂无字段定义</div>}
+                        </div>
+                      </div>
+
+                      <div className="schema-panel">
+                        <div className="schema-sub-title">
+                          <span>示例</span>
+                          <span>JSON</span>
+                        </div>
+                        <pre className="schema-code">
+                          {JSON.stringify(requestSchemaExample ?? normalizedRequestSchema, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </Card>
             )}
       </div>
 

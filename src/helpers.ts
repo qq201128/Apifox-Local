@@ -157,6 +157,89 @@ export function findChildrenById(arr: ApiMenuData[], id: ApiMenuData['id']): Api
   return result
 }
 
+/**
+ * 将搜索词规范为可与接口 path 比对的形式（支持粘贴完整 http(s) URL，取 path + search）。
+ */
+function normalizeMenuSearchQuery(raw: string): string {
+  const t = raw.trim()
+  if (!t) {
+    return t
+  }
+  try {
+    if (/^https?:\/\//i.test(t)) {
+      const u = new URL(t)
+      const withSearch = `${u.pathname}${u.search}`
+      return withSearch.endsWith('?') ? withSearch.slice(0, -1) : withSearch
+    }
+  }
+  catch {
+    /* 非合法 URL，按原文搜索 */
+  }
+  return t
+}
+
+/** 接口管理侧栏搜索：名称、路径、HTTP 方法（不区分大小写）。 */
+export function menuItemMatchesSearch(item: ApiMenuData, rawQuery: string): boolean {
+  const q = normalizeMenuSearchQuery(rawQuery)
+  if (!q) {
+    return true
+  }
+
+  if (item.name.includes(q)) {
+    return true
+  }
+
+  if (item.type !== MenuItemType.ApiDetail && item.type !== MenuItemType.HttpRequest) {
+    return false
+  }
+
+  const path = item.data?.path
+  if (path) {
+    const pathNorm = path.startsWith('/') ? path : `/${path}`
+    const qNorm = q.startsWith('/') ? q : `/${q}`
+    if (pathNorm.toLowerCase().includes(qNorm.toLowerCase())) {
+      return true
+    }
+  }
+
+  const method = item.data?.method
+  if (method && q.length <= 12 && method.toLowerCase() === q.toLowerCase()) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * 按搜索词过滤菜单项，并包含匹配项的所有祖先文件夹，保证树结构完整。
+ */
+export function filterMenuItemsBySearch(
+  menuRawList: ApiMenuData[],
+  menuSearchWord: string,
+): ApiMenuData[] {
+  const q = menuSearchWord.trim()
+  if (!q) {
+    return menuRawList
+  }
+
+  const byId = new Map(menuRawList.map((it) => [it.id, it]))
+  const matches = new Set<string>()
+
+  for (const item of menuRawList) {
+    if (!menuItemMatchesSearch(item, q)) {
+      continue
+    }
+    matches.add(item.id)
+    let pid = item.parentId
+    while (pid) {
+      matches.add(pid)
+      pid = byId.get(pid)?.parentId
+    }
+  }
+
+  return menuRawList.filter((it) => matches.has(it.id))
+}
+
 export function hasAccentColor(type: UnsafeAny): boolean {
   return (
     type === MenuItemType.ApiDetail

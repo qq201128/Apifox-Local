@@ -1,26 +1,50 @@
 'use client'
 
+import { Suspense, lazy, useEffect, useState } from 'react'
+
 import { Button, ConfigProvider, Dropdown, Flex, theme, Tooltip } from 'antd'
 import { FilterIcon, PlusIcon } from 'lucide-react'
 
-import { ApiMenu } from '@/components/ApiMenu'
 import { ApiMenuContextProvider } from '@/components/ApiMenu/ApiMenuContext'
-import { ApiTab } from '@/components/ApiTab'
 import { FileIcon } from '@/components/icons/FileIcon'
 import { IconText } from '@/components/IconText'
 import { InputSearch } from '@/components/InputSearch'
 import { API_MENU_CONFIG } from '@/configs/static'
-import { MenuTabProvider } from '@/contexts/menu-tab-settings'
 import { MenuItemType } from '@/enums'
 import { getCatalogType } from '@/helpers'
 import { useHelpers } from '@/hooks/useHelpers'
 
 import { PanelLayout } from '../components/PanelLayout'
 
+const ApiMenu = lazy(async () => {
+  const mod = await import('@/components/ApiMenu')
+  return { default: mod.ApiMenu }
+})
+
+const ApiTab = lazy(async () => {
+  const mod = await import('@/components/ApiTab')
+  return { default: mod.ApiTab }
+})
+
+function LoadingPlaceholder() {
+  return <div className="h-full w-full animate-pulse bg-zinc-50 dark:bg-zinc-900/30" />
+}
+
 function HomeContent() {
   const { token } = theme.useToken()
+  const [showHeavyContent, setShowHeavyContent] = useState(false)
 
   const { createTabItem } = useHelpers()
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setShowHeavyContent(true)
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [])
 
   return (
     <PanelLayout
@@ -76,22 +100,30 @@ function HomeContent() {
             </ConfigProvider>
           </Flex>
 
-          <div className="ui-menu flex-1 overflow-y-auto">
+          <div className="ui-menu flex-1 overflow-hidden">
             <ApiMenuContextProvider>
-              <ApiMenu />
+              {showHeavyContent
+                ? (
+                    <Suspense fallback={<LoadingPlaceholder />}>
+                      <ApiMenu />
+                    </Suspense>
+                  )
+                : <LoadingPlaceholder />}
             </ApiMenuContextProvider>
           </div>
         </>
       )}
-      right={<ApiTab />}
+      right={showHeavyContent
+        ? (
+            <Suspense fallback={<LoadingPlaceholder />}>
+              <ApiTab />
+            </Suspense>
+          )
+        : <LoadingPlaceholder />}
     />
   )
 }
 
 export default function HomePage() {
-  return (
-    <MenuTabProvider>
-      <HomeContent />
-    </MenuTabProvider>
-  )
+  return <HomeContent />
 }

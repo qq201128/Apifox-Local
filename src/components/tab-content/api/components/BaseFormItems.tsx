@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
-import Link from 'next/link'
 import { Col, Form, Row, Select, type SelectProps } from 'antd'
+import { Link } from 'react-router'
 import useResizeObserver from 'use-resize-observer'
 
 import { SelectorService } from '@/components/SelectorService'
@@ -95,7 +95,7 @@ export function BaseFormItems() {
                 指定服务后，该接口运行时会使用该服务对应的
                 <b>前置 URL</b>
                 （在
-                <Link href="/">环境</Link>
+                <Link to="/">环境</Link>
                 里设置）。
               </span>
             )}

@@ -6,8 +6,10 @@ export function getPageTitle(title?: string): string {
   return title ? `${title} - ${mainTitle}` : mainTitle
 }
 
-/** 将 JS 序列化为 JSON 的超集，包括正则表达式，日期和函数。 */
-export { default as serialize } from 'serialize-javascript'
+/** 将 JS 值序列化为可读字符串（浏览器安全）。 */
+export function serialize(value: unknown, space = 2): string {
+  return JSON.stringify(value, null, space)
+}
 
 /** 反序列化，对应 serialize 方法。 */
 export function deserialize(data: AnyType): unknown {

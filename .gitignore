@@ -37,3 +37,17 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+.ace-tool/
+
+# local editor settings
+.vscode/
+.idea/
+
+# react-router generated files
+.react-router/
+
+# local runtime database files
+runtime/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

@@ -1,39 +1,52 @@
 <svg
   xmlns="http://www.w3.org/2000/svg"
-  xmlns:xlink="http://www.w3.org/1999/xlink"
+  width="256"
+  height="256"
+  viewBox="0 0 256 256"
   fill="none"
-  version="1.1"
-  viewBox="0 0 200 200"
 >
   <defs>
-    <clipPath id="master_svg0_1_09"><rect x="0" y="0" width="200" height="200" rx="0" /></clipPath>
-    <linearGradient
-      x1="0.31521737575531006"
-      y1="1.1111176013946533"
-      x2="1.0326086282730103"
-      y2="1.1111180782318115"
-      id="master_svg1_1_02"
-    >
-      <stop offset="0%" stop-color="#F94612" stop-opacity="1" />
-      <stop offset="100%" stop-color="#F98F12" stop-opacity="1" />
+    <linearGradient id="bg" x1="36" y1="28" x2="220" y2="228" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A" />
+      <stop offset="1" stop-color="#155E75" />
     </linearGradient>
+    <linearGradient id="route" x1="88" y1="92" x2="176" y2="160" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE" />
+      <stop offset="1" stop-color="#F59E0B" />
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(190 58) rotate(130.872) scale(184.513)">
+      <stop stop-color="#67E8F9" stop-opacity=".4" />
+      <stop offset="1" stop-color="#67E8F9" stop-opacity="0" />
+    </radialGradient>
   </defs>
-  <g clip-path="url(#master_svg0_1_09)">
-    <g>
-      <g>
-        <path
-          d="M118.454,90.5205C118.454,90.5205,118.454,181,118.454,181C118.454,181,158.502,181,158.502,181C158.502,181,158.502,90.5205,158.502,90.5205C158.502,90.5205,118.454,90.5205,118.454,90.5205C118.454,90.5205,118.454,90.5205,118.454,90.5205ZM57.0477,181C57.0477,181,57.0477,90.5205,57.0477,90.5205C57.0477,90.5205,17,90.5205,17,90.5205C17,90.5205,17,181,17,181C17,181,57.0477,181,57.0477,181C57.0477,181,57.0477,181,57.0477,181ZM87.7511,59.9172C104.7081,59.9172,118.454,73.6189,118.454,90.5205C118.454,90.5205,158.502,90.5205,158.502,90.5205C158.502,51.5731,126.826,20.000000000000007,87.7511,20.000000000000007C87.7511,20.000000000000007,87.7511,59.9172,87.7511,59.9172C87.7511,59.9172,87.7511,59.9172,87.7511,59.9172ZM87.7511,20.000000000000007C48.6763,20.000000000000007,17,51.5731,17,90.5205C17,90.5205,57.0477,90.5205,57.0477,90.5205C57.0477,73.6189,70.79419999999999,59.9172,87.7511,59.9172C87.7511,59.9172,87.7511,20.000000000000007,87.7511,20.000000000000007C87.7511,20.000000000000007,87.7511,20.000000000000007,87.7511,20.000000000000007Z"
-          fill="#F94612"
-          fill-opacity="1"
-        />
-      </g>
-      <g>
-        <path
-          d="M40.81809183288574,147.37406552734376C40.81809183288574,147.37406552734376,192.99958183288575,118.10146552734375,192.99958183288575,118.10146552734375C192.99958183288575,118.10146552734375,185.41158183288573,78.90716552734375,185.41158183288573,78.90716552734375C185.41158183288573,78.90716552734375,33.22958183288574,108.17996552734375,33.22958183288574,108.17996552734375C33.22958183288574,108.17996552734375,40.81809183288574,147.37406552734376,40.81809183288574,147.37406552734376C40.81809183288574,147.37406552734376,40.81809183288574,147.37406552734376,40.81809183288574,147.37406552734376Z"
-          fill="url(#master_svg1_1_02)"
-          fill-opacity="1"
-        />
-      </g>
-    </g>
-  </g>
+
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="url(#bg)" />
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="url(#glow)" />
+
+  <path
+    d="M84 82H66V174H84"
+    stroke="#F8FAFC"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M172 82H190V174H172"
+    stroke="#F8FAFC"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M92 96H128V128H160V160"
+    stroke="url(#route)"
+    stroke-width="18"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <circle cx="92" cy="96" r="13" fill="#F8FAFC" stroke="#22D3EE" stroke-width="8" />
+  <circle cx="128" cy="128" r="13" fill="#F8FAFC" stroke="#38BDF8" stroke-width="8" />
+  <circle cx="160" cy="160" r="13" fill="#F8FAFC" stroke="#F59E0B" stroke-width="8" />
 </svg>

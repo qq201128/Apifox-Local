@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid'
 
 import type { ApiMenuData } from '@/components/ApiMenu/ApiMenu.type'
 import { FileIcon } from '@/components/icons/FileIcon'
+import { ModalImportCurl } from '@/components/modals/ModalImportCurl'
 import { ModalMoveMenu } from '@/components/modals/ModalMoveMenu'
 import { ModalNewCatalog } from '@/components/modals/ModalNewCatalog'
 import { ModalRename } from '@/components/modals/ModalRename'
@@ -19,6 +20,8 @@ interface DropdownActionsProps extends DropDownProps {
   catalog: ApiMenuData
   isFolder?: boolean
 }
+
+type MenuClickInfo = Parameters<NonNullable<MenuProps['onClick']>>[0]
 
 /**
  * 菜单的操作菜单。
@@ -83,6 +86,17 @@ export function DropdownActions(props: React.PropsWithChildren<DropdownActionsPr
         createTabItem(createType)
       },
     },
+    ...(catalog.type === MenuItemType.ApiDetailFolder
+      ? [{
+          key: 'importCurl',
+          label: '导入 cURL',
+          icon: <FolderInputIcon size={14} />,
+          onClick: (ev: MenuClickInfo) => {
+            ev.domEvent.stopPropagation()
+            void show(ModalImportCurl, { parentId: catalog.id })
+          },
+        }]
+      : []),
 
     { type: 'divider' },
 

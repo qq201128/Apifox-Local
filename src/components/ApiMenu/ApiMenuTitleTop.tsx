@@ -2,11 +2,12 @@ import { useMemo } from 'react'
 
 import { CaretRightFilled } from '@ant-design/icons'
 import { show } from '@ebay/nice-modal-react'
-import { Dropdown, type DropdownProps, theme, Tooltip } from 'antd'
+import { Dropdown, type DropdownProps, type MenuProps, theme, Tooltip } from 'antd'
 import {
   CheckIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
+  FolderInputIcon,
   FolderPlusIcon,
   MoreHorizontalIcon,
   PlusIcon,
@@ -14,6 +15,7 @@ import {
 
 import { AppMenuControls } from '@/components/ApiMenu/AppMenuControls'
 import { FileIcon } from '@/components/icons/FileIcon'
+import { ModalImportCurl } from '@/components/modals/ModalImportCurl'
 import { ModalNewCatalog } from '@/components/modals/ModalNewCatalog'
 import { API_MENU_CONFIG, ROOT_CATALOG } from '@/configs/static'
 import { useMenuHelpersContext } from '@/contexts/menu-helpers'
@@ -25,6 +27,7 @@ import { useApiMenuContext } from './ApiMenuContext'
 import { MenuActionButton } from './MenuActionButton'
 
 type DropdownMenuItems = NonNullable<DropdownProps['menu']>['items']
+type MenuClickInfo = Parameters<NonNullable<MenuProps['onClick']>>[0]
 
 interface ApiMenuTopTitleProps {
   topMenuType: CatalogType
@@ -122,6 +125,19 @@ export function ApiMenuTitleTop(props: ApiMenuTopTitleProps) {
                     })
                   },
                 },
+                ...(topMenuType === CatalogType.Http
+                  ? [
+                      {
+                        key: 'importCurl',
+                        label: '导入 cURL',
+                        icon: <FolderInputIcon size={14} />,
+                        onClick: (ev: MenuClickInfo) => {
+                          ev.domEvent.stopPropagation()
+                          void show(ModalImportCurl)
+                        },
+                      },
+                    ]
+                  : []),
                 ...extraDropdownMenuItems,
               ],
             }}

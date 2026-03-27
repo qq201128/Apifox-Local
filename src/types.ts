@@ -60,6 +60,101 @@ interface ApiDetailsResponseExample {
   data: string
 }
 
+export interface ApiRequestBody {
+  type: BodyType
+  parameters?: Parameter[]
+  jsonSchema?: JsonSchema
+  rawText?: string
+}
+
+export const API_REQUEST_AUTH_TARGETS = ['header', 'query', 'cookie'] as const
+
+export type ApiRequestAuthTarget = typeof API_REQUEST_AUTH_TARGETS[number]
+
+export interface ApiRequestNoAuth {
+  type: 'none'
+}
+
+export interface ApiRequestBearerAuth {
+  type: 'bearer'
+  token: string
+}
+
+export interface ApiRequestBasicAuth {
+  type: 'basic'
+  username: string
+  password: string
+}
+
+export interface ApiRequestApiKeyAuth {
+  type: 'apiKey'
+  key: string
+  value: string
+  target: ApiRequestAuthTarget
+}
+
+export type ApiRequestAuth =
+  | ApiRequestNoAuth
+  | ApiRequestBearerAuth
+  | ApiRequestBasicAuth
+  | ApiRequestApiKeyAuth
+
+export interface ApiRunHeader {
+  name: string
+  value: string
+}
+
+export interface ApiEnvironmentValue {
+  id: string
+  name: string
+  remoteValue?: string
+  localValue?: string
+}
+
+export const GLOBAL_PARAMETER_SECTIONS = ['header', 'cookie', 'query', 'body'] as const
+
+export type ApiEnvironmentGlobalParameterSection = typeof GLOBAL_PARAMETER_SECTIONS[number]
+export type ApiEnvironmentGlobalParameters = Record<ApiEnvironmentGlobalParameterSection, ApiEnvironmentValue[]>
+
+export interface ApiEnvironmentBaseUrl {
+  id: string
+  name: string
+  url: string
+}
+
+export interface ApiEnvironment {
+  id: string
+  name: string
+  url: string
+  shared?: boolean
+  baseUrls?: ApiEnvironmentBaseUrl[]
+  variables?: ApiEnvironmentValue[]
+}
+
+export interface ProjectEnvironmentConfig {
+  globalVariables: ApiEnvironmentValue[]
+  globalParameters: ApiEnvironmentGlobalParameters
+  legacyGlobalParameters?: ApiEnvironmentValue[]
+  vaultSecrets: ApiEnvironmentValue[]
+  environments: ApiEnvironment[]
+}
+
+export interface ApiRunResult {
+  url: string
+  method: HttpMethod
+  status: number
+  statusText: string
+  durationMs: number
+  requestHeaders: ApiRunHeader[]
+  requestQuery: ApiRunHeader[]
+  requestCookie: ApiRunHeader[]
+  requestBodyParameters: ApiRunHeader[]
+  requestBodyText?: string
+  headers: ApiRunHeader[]
+  contentType?: string
+  body?: string
+}
+
 export interface ApiDetails {
   /** 唯一标识 */
   id: string
@@ -81,6 +176,8 @@ export interface ApiDetails {
   tags?: string[]
   /** 前置 URL 选择 */
   serverId?: string
+  /** 接口前置 URL */
+  serverUrl?: string
   /** 接口说明 */
   description?: string
   /** 请求参数 */
@@ -91,11 +188,9 @@ export interface ApiDetails {
     path?: Parameter[]
   }
   /** 请求参数 - Body */
-  requestBody?: {
-    type: BodyType
-    parameters?: Parameter[]
-    jsonSchema?: JsonSchema
-  }
+  requestBody?: ApiRequestBody
+  /** 请求鉴权 */
+  auth?: ApiRequestAuth
   /** 返回响应 */
   responses?: ApiDetailsResponse[]
   /** 响应示例 */
@@ -131,6 +226,7 @@ export interface ApiFolder {
   name: string
   parentId?: ApiMenuBase['id']
   serverId?: string
+  serverUrl?: string
   /** 文件夹备注。 */
   description?: string
 }

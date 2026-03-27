@@ -67,7 +67,7 @@ function EditorX<ValueType = unknown>(
   // 转换 value 为字符串，以便编辑器能正确显示。
   const getEditorValue = (value: UnsafeAny): string | undefined => {
     if (isPureObject(value)) {
-      return serialize(value, { space: 2, unsafe: true })
+      return serialize(value, 2)
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return

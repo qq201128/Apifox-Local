@@ -2,7 +2,18 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { useEvent } from 'react-use-event-hook'
 
 import type { ApiTabItem, EditStatus } from '@/components/ApiTab'
-import { initialActiveTabKey, initialTabItems } from '@/data/remote'
+import { API_MENU_CONFIG } from '@/configs/static'
+import { CatalogType } from '@/enums'
+
+function createDefaultTabItems(): ApiTabItem[] {
+  return [
+    {
+      key: CatalogType.Overview,
+      label: API_MENU_CONFIG[CatalogType.Overview].title,
+      contentType: CatalogType.Overview,
+    },
+  ]
+}
 
 interface MenuTabContextData {
   /** 当前在 Tabs 中打开的所有页签。 */
@@ -20,15 +31,21 @@ interface MenuTabContextData {
 
 const MenuTabContext = createContext({} as MenuTabContextData)
 
-export function MenuTabProvider(props: React.PropsWithChildren) {
+interface MenuTabProviderProps extends React.PropsWithChildren {
+  projectId?: string
+}
+
+export function MenuTabProvider(props: MenuTabProviderProps) {
+  const { children, projectId } = props
   const [tabItems, setTabItems] = useState<ApiTabItem[]>([])
   const [activeTabKey, setActiveTabKey] = useState<ApiTabItem['key']>()
   const [lastActiveTabKey, setLastActiveTabKey] = useState<ApiTabItem['key']>()
 
   useEffect(() => {
-    setTabItems(initialTabItems)
-    setActiveTabKey(initialActiveTabKey)
-  }, [])
+    setTabItems(createDefaultTabItems())
+    setActiveTabKey(CatalogType.Overview)
+    setLastActiveTabKey(undefined)
+  }, [projectId])
 
   return (
     <MenuTabContext.Provider
@@ -43,7 +60,7 @@ export function MenuTabProvider(props: React.PropsWithChildren) {
         setLastActiveTabKey,
       }}
     >
-      {props.children}
+      {children}
     </MenuTabContext.Provider>
   )
 }

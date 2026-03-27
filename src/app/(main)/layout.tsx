@@ -1,37 +1,44 @@
 'use client'
 
 import { theme } from 'antd'
+import { Outlet, useParams } from 'react-router'
 
 import { SideNav } from '@/app/(main)/components/SideNav'
 import { HeaderNav } from '@/components/HeaderNav'
 import { LayoutProvider } from '@/contexts/layout-settings'
+import { MenuTabProvider } from '@/contexts/menu-tab-settings'
 import { useCssVariable } from '@/hooks/useCssVariable'
 
-export default function MainLayout(props: React.PropsWithChildren) {
+export default function MainLayout() {
   const { token } = theme.useToken()
+  const { projectId } = useParams()
 
   const cssVar = useCssVariable()
 
   return (
-    <div className="flex h-full" style={{ backgroundColor: token.colorFillTertiary, ...cssVar }}>
-      <SideNav />
+    <MenuTabProvider projectId={projectId}>
+      <div className="flex h-full" style={{ backgroundColor: token.colorFillTertiary, ...cssVar }}>
+        <SideNav />
 
-      <div className="flex h-full flex-1 flex-col overflow-hidden pb-main pr-main">
-        <div className="h-10 overflow-hidden">
-          <HeaderNav />
-        </div>
+        <div className="flex h-full flex-1 flex-col overflow-hidden pb-main pr-main">
+          <div className="h-10 overflow-hidden">
+            <HeaderNav />
+          </div>
 
-        <div
-          className="relative flex-1 overflow-y-auto border border-solid"
-          style={{
-            borderColor: token.colorFillSecondary,
-            backgroundColor: token.colorBgContainer,
-            borderRadius: 10,
-          }}
-        >
-          <LayoutProvider>{props.children}</LayoutProvider>
+          <div
+            className="relative flex-1 overflow-y-auto border border-solid"
+            style={{
+              borderColor: token.colorFillSecondary,
+              backgroundColor: token.colorBgContainer,
+              borderRadius: 10,
+            }}
+          >
+            <LayoutProvider>
+              <Outlet />
+            </LayoutProvider>
+          </div>
         </div>
       </div>
-    </div>
+    </MenuTabProvider>
   )
 }

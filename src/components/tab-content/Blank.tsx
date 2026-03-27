@@ -1,9 +1,10 @@
 import { show } from '@ebay/nice-modal-react'
 import { Button, Col, Dropdown, Row, theme } from 'antd'
-import { ChevronDownIcon, FolderPlusIcon } from 'lucide-react'
+import { ChevronDownIcon, FolderInputIcon, FolderPlusIcon } from 'lucide-react'
 
 import { useTabContentContext } from '@/components/ApiTab/TabContentContext'
 import { FileIcon } from '@/components/icons/FileIcon'
+import { ModalImportCurl } from '@/components/modals/ModalImportCurl'
 import { ModalNewCatalog } from '@/components/modals/ModalNewCatalog'
 import { API_MENU_CONFIG } from '@/configs/static'
 import { CatalogType, MenuItemType } from '@/enums'
@@ -107,6 +108,14 @@ export function Blank() {
               icon: <FolderPlusIcon size={18} />,
               onClick: () => {
                 void show(ModalNewCatalog, { formData: { type: MenuItemType.ApiDetailFolder } })
+              },
+            },
+            {
+              key: '1',
+              label: '导入 cURL',
+              icon: <FolderInputIcon size={18} />,
+              onClick: () => {
+                void show(ModalImportCurl)
               },
             },
           ],

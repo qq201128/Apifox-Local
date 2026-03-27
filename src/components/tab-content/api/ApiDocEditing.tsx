@@ -20,6 +20,7 @@ import { BaseFormItems } from './components/BaseFormItems'
 import { GroupTitle } from './components/GroupTitle'
 import { PathInput, type PathInputProps } from './components/PathInput'
 import { ParamsTab } from './params/ParamsTab'
+import { useApiRequestRunner } from './useApiRequestRunner'
 
 const DEFAULT_NAME = '未命名接口'
 
@@ -45,9 +46,15 @@ export function ApiDocEditing() {
   const { messageApi } = useGlobalContext()
   const msgKey = useRef<string>()
 
-  const { menuRawList, addMenuItem, updateMenuItem } = useMenuHelpersContext()
+  const {
+    menuRawList,
+    projectEnvironmentConfig,
+    addMenuItem,
+    updateMenuItem,
+  } = useMenuHelpersContext()
   const { addTabItem } = useMenuTabHelpers()
   const { tabData } = useTabContentContext()
+  const { run, running } = useApiRequestRunner()
 
   const isCreating = tabData.data?.tabStatus === PageTabStatus.Create
 
@@ -78,6 +85,9 @@ export function ApiDocEditing() {
 
   const handleFinish: FormProps<ApiDetails>['onFinish'] = (values) => {
     const menuName = values.name ?? DEFAULT_NAME
+    const createType = tabData.contentType === MenuItemType.HttpRequest
+      ? MenuItemType.HttpRequest
+      : MenuItemType.ApiDetail
 
     if (isCreating) {
       const menuItemId = nanoid(6)
@@ -85,7 +95,7 @@ export function ApiDocEditing() {
       addMenuItem({
         id: menuItemId,
         name: menuName,
-        type: MenuItemType.ApiDetail,
+        type: createType,
         data: { ...values, name: menuName },
       })
 
@@ -93,7 +103,7 @@ export function ApiDocEditing() {
         {
           key: menuItemId,
           label: menuName,
-          contentType: MenuItemType.ApiDetail,
+          contentType: createType,
         },
         { replaceTab: tabData.key },
       )
@@ -235,7 +245,16 @@ export function ApiDocEditing() {
 
           {!isCreating && (
             <>
-              <Button>运行</Button>
+              <Button
+                loading={running}
+                onClick={() => {
+                  void form.validateFields()
+                    .then((values) => run(values))
+                    .catch(() => {})
+                }}
+              >
+                运行
+              </Button>
               <ApiRemoveButton tabKey={tabData.key} />
             </>
           )}
@@ -253,7 +272,7 @@ export function ApiDocEditing() {
 
         <GroupTitle className="mt-2">请求参数</GroupTitle>
         <Form.Item noStyle name="parameters">
-          <ParamsTab />
+          <ParamsTab globalParameters={projectEnvironmentConfig.globalParameters} />
         </Form.Item>
 
         <GroupTitle className="mb-3 mt-8">返回响应</GroupTitle>

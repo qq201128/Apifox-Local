@@ -4,9 +4,11 @@ import { SchemaType } from '@/components/JsonSchema'
 import { JsonSchemaCard } from '@/components/JsonSchemaCard'
 import { BodyType } from '@/enums'
 import { useStyles } from '@/hooks/useStyle'
-import type { ApiDetails } from '@/types'
+import type { ApiDetails, ApiEnvironmentValue } from '@/types'
 
 import { ParamsEditableTable } from '../components/ParamsEditableTable'
+
+import { GlobalParametersNotice } from './GlobalParametersNotice'
 
 const types = [
   { name: 'none', type: BodyType.None },
@@ -74,14 +76,21 @@ function BodyComp(props: BodyCompProps) {
 }
 
 interface ParamsBodyProps {
+  globalRows?: ApiEnvironmentValue[]
   value?: ApiDetails['requestBody']
   onChange?: (value: ParamsBodyProps['value']) => void
 }
 
 export function ParamsBody(props: ParamsBodyProps) {
-  const { value, onChange } = props
+  const { globalRows, value, onChange } = props
 
   const selectedType = value?.type ?? BodyType.None
+  const bodyParamNames = new Set(
+    (value?.parameters ?? [])
+      .filter((item) => item.name && item.enable !== false)
+      .map((item) => item.name as string),
+  )
+  const supportsGlobalBodyParams = selectedType === BodyType.FormData || selectedType === BodyType.UrlEncoded
 
   return (
     <div>
@@ -104,6 +113,14 @@ export function ParamsBody(props: ParamsBodyProps) {
       </Flex>
 
       <div>
+        <GlobalParametersNotice
+          description={supportsGlobalBodyParams
+            ? '运行时会自动带入这些全局 Body 参数；同名接口参数优先。'
+            : `当前 Body 类型为 ${selectedType}，这些全局 Body 参数当前不会生效。`}
+          overriddenNames={bodyParamNames}
+          rows={globalRows}
+          title="当前全局 Body 参数"
+        />
         <BodyComp value={value ?? { type: BodyType.None }} onChange={onChange} />
       </div>
     </div>

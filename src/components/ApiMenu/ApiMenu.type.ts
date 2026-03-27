@@ -50,6 +50,7 @@ export type CatalogDataNode = Omit<TreeDataNode, 'key'> & {
   key: string
   customData: {
     catalog: ApiMenuData
+    leafCount?: number
   }
   children?: CatalogDataNode[]
 }

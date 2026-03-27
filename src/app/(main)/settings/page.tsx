@@ -1,11 +1,45 @@
 'use client'
 
-import { ConfigProvider, Menu, type MenuProps, Skeleton, theme } from 'antd'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+
+import {
+  ConfigProvider,
+  Menu,
+  type MenuProps,
+  Space,
+  Tag,
+  theme,
+  Typography,
+  message,
+} from 'antd'
 import { LayersIcon, SettingsIcon } from 'lucide-react'
+import { useLocation } from 'react-router'
+
+import { ProjectEnvironmentsPanel } from '@/components/project-settings/ProjectEnvironmentsPanel'
+import { ApiTransferPanel } from '@/components/project-settings/ApiTransferPanel'
+import {
+  ProjectMembersSection,
+  type InvitationItem,
+  type MemberItem,
+  type Role,
+} from '@/components/project-settings/ProjectMembersSection'
 
 import { PanelLayout } from '../components/PanelLayout'
 
 type MenuItem = Required<MenuProps>['items'][number]
+
+const enum SettingsSectionKey {
+  Members = 'members',
+  Environments = 'environments',
+  ImportApi = 'import-api',
+}
+
+interface ProjectInfo {
+  id: string
+  name: string
+  ownerId: string
+  createdAt: string
+}
 
 const items: MenuItem[] = [
   {
@@ -18,15 +52,8 @@ const items: MenuItem[] = [
     ),
     type: 'group',
     children: [
-      { key: '1', label: '基本设置' },
-      {
-        key: '2',
-        label: '功能设置',
-        children: [
-          { key: '1x', label: '接口功能设置' },
-          { key: '2x', label: '高级设置' },
-        ],
-      },
+      { key: SettingsSectionKey.Members, label: '成员管理' },
+      { key: SettingsSectionKey.Environments, label: '环境管理' },
     ],
   },
   {
@@ -38,15 +65,160 @@ const items: MenuItem[] = [
       </div>
     ),
     type: 'group',
-    children: [
-      { key: '3', label: '常用参数' },
-      { key: '4', label: '公共响应' },
-    ],
+    children: [{ key: SettingsSectionKey.ImportApi, label: '导入接口' }],
   },
 ]
 
+function sectionMeta(section: SettingsSectionKey) {
+  if (section === SettingsSectionKey.Members) {
+    return {
+      title: '成员管理',
+      description: '管理项目成员、角色以及邀请链接。',
+    }
+  }
+
+  if (section === SettingsSectionKey.Environments) {
+    return {
+      title: '环境管理',
+      description: '统一维护项目环境、前置 URL、全局变量与密钥。',
+    }
+  }
+
+  return {
+    title: '导入接口',
+    description: '导入 OpenAPI 或 Postman 文档，并替换当前项目资源。',
+  }
+}
+
+function roleText(role: Role) {
+  if (role === 'owner') {
+    return '拥有者'
+  }
+
+  if (role === 'editor') {
+    return '编辑者'
+  }
+
+  return '查看者'
+}
+
 export default function SettingsPage() {
   const { token } = theme.useToken()
+  const { pathname, search } = useLocation()
+  const [msgApi, contextHolder] = message.useMessage()
+  const [loading, setLoading] = useState(false)
+  const [selectedSection, setSelectedSection] = useState<SettingsSectionKey>(() => {
+    const params = new URLSearchParams(search)
+    const section = params.get('section')
+
+    if (section === SettingsSectionKey.Environments) {
+      return SettingsSectionKey.Environments
+    }
+
+    if (section === SettingsSectionKey.ImportApi) {
+      return SettingsSectionKey.ImportApi
+    }
+
+    return SettingsSectionKey.Members
+  })
+  const [members, setMembers] = useState<MemberItem[]>([])
+  const [invitations, setInvitations] = useState<InvitationItem[]>([])
+  const [project, setProject] = useState<ProjectInfo>()
+  const [projectRole, setProjectRole] = useState<Role>()
+  const [currentUserId, setCurrentUserId] = useState<string>()
+
+  const projectId = useMemo(() => {
+    const parts = pathname.split('/').filter(Boolean)
+    return parts.at(0) === 'projects' ? parts.at(1) : undefined
+  }, [pathname])
+
+  const canManageMembers = Boolean(currentUserId && project?.ownerId === currentUserId)
+  const canManageEnvironments = projectRole === 'owner' || projectRole === 'editor'
+  const isMembersSection = selectedSection === SettingsSectionKey.Members
+  const isEnvironmentsSection = selectedSection === SettingsSectionKey.Environments
+  const currentSectionMeta = sectionMeta(selectedSection)
+
+  const fetchData = useCallback(async () => {
+    if (!projectId) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await fetch(`/api/v1/projects/${projectId}?includeMembers=true`, {
+        credentials: 'include',
+      })
+
+      const payload = await response.json() as {
+        ok: boolean
+        data?: {
+          currentUserId: string
+          project: ProjectInfo
+          role: Role
+          members?: MemberItem[]
+        }
+        error: string | null
+      }
+
+      if (!response.ok || !payload.ok || !payload.data) {
+        throw new Error(payload.error ?? '加载失败')
+      }
+
+      setProject(payload.data.project)
+      setProjectRole(payload.data.role)
+      setCurrentUserId(payload.data.currentUserId)
+      setMembers(payload.data.members ?? [])
+
+      if (payload.data.project.ownerId !== payload.data.currentUserId) {
+        setInvitations([])
+        return
+      }
+
+      const invitationResponse = await fetch(`/api/v1/projects/${projectId}/invitations`, {
+        credentials: 'include',
+      })
+
+      const invitationPayload = await invitationResponse.json() as {
+        ok: boolean
+        data?: { invitations?: InvitationItem[] }
+        error: string | null
+      }
+
+      if (!invitationResponse.ok || !invitationPayload.ok || !invitationPayload.data) {
+        throw new Error(invitationPayload.error ?? '加载邀请失败')
+      }
+
+      setInvitations(invitationPayload.data.invitations ?? [])
+    }
+    catch (error) {
+      msgApi.error((error as Error).message)
+    }
+    finally {
+      setLoading(false)
+    }
+  }, [msgApi, projectId])
+
+  useEffect(() => {
+    void fetchData()
+  }, [fetchData])
+
+  useEffect(() => {
+    const params = new URLSearchParams(search)
+    const section = params.get('section')
+
+    if (section === SettingsSectionKey.Environments) {
+      setSelectedSection(SettingsSectionKey.Environments)
+      return
+    }
+
+    if (section === SettingsSectionKey.ImportApi) {
+      setSelectedSection(SettingsSectionKey.ImportApi)
+      return
+    }
+
+    setSelectedSection(SettingsSectionKey.Members)
+  }, [search])
 
   return (
     <PanelLayout
@@ -66,15 +238,53 @@ export default function SettingsPage() {
               },
             }}
           >
-            <Menu items={items} mode="inline" />
+            <Menu
+              items={items}
+              mode="inline"
+              selectedKeys={[selectedSection]}
+              onClick={({ key }) => {
+                setSelectedSection(key as SettingsSectionKey)
+              }}
+            />
           </ConfigProvider>
         </div>
       )}
       right={(
         <div className="p-5">
-          待实现的设置页
-          <Skeleton />
-          <Skeleton />
+          {contextHolder}
+
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <Typography.Title level={4}>{currentSectionMeta.title}</Typography.Title>
+              <Typography.Paragraph className="!mb-0" type="secondary">
+                {currentSectionMeta.description}
+              </Typography.Paragraph>
+            </div>
+            <Space size={8} wrap>
+              <Tag bordered={false}>项目：{project?.name ?? '-'}</Tag>
+              {projectRole ? <Tag color="blue">{roleText(projectRole)}</Tag> : <Tag>-</Tag>}
+            </Space>
+          </div>
+
+          {isMembersSection
+            ? (
+                <ProjectMembersSection
+                  canManageMembers={canManageMembers}
+                  invitations={invitations}
+                  loading={loading}
+                  members={members}
+                  projectId={projectId}
+                  projectOwnerId={project?.ownerId}
+                  onRefresh={fetchData}
+                />
+              )
+            : isEnvironmentsSection
+              ? (
+                  <ProjectEnvironmentsPanel editable={canManageEnvironments} />
+                )
+            : (
+                <ApiTransferPanel />
+              )}
         </div>
       )}
     />

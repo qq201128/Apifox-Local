@@ -10,7 +10,7 @@ import { HttpMethodText } from '@/components/icons/HttpMethodText'
 import { API_MENU_CONFIG } from '@/configs/static'
 import { useMenuHelpersContext } from '@/contexts/menu-helpers'
 import { CatalogType, MenuItemType } from '@/enums'
-import { getCatalogType, hasAccentColor, isMenuFolder } from '@/helpers'
+import { filterMenuItemsBySearch, getCatalogType, hasAccentColor, isMenuFolder } from '@/helpers'
 import { useStyles } from '@/hooks/useStyle'
 
 import type { CatalogDataNode, TreeDataNode } from './ApiMenu.type'
@@ -22,6 +22,21 @@ import { FolderAction } from './FolderAction'
 import { css } from '@emotion/css'
 
 type GroupedMenu = Record<CatalogType, CatalogDataNode[]>
+
+const attachLeafCount = (node: CatalogDataNode): number => {
+  if (node.isLeaf) {
+    node.customData.leafCount = 0
+    return 1
+  }
+
+  const leafCount = node.children?.reduce((sum, child) => {
+    return sum + attachLeafCount(child as CatalogDataNode)
+  }, 0) ?? 0
+
+  node.customData.leafCount = leafCount
+
+  return leafCount
+}
 
 /**
  * 将菜单目录按照类型进行归类和组装。
@@ -91,13 +106,11 @@ export function useMenuData(): MenuState {
    * 此处将从服务端获取到的菜单数据，按照符合菜单树组件的结构组装。
    */
   const menus: CatalogDataNode[] | undefined = useMemo(() => {
-    const menuList = menuSearchWord
-      ? menuRawList?.filter(({ name }) => {
-        return name.includes(menuSearchWord)
-      })
-      : menuRawList
+    const menuList = (menuSearchWord
+      ? menuRawList && filterMenuItemsBySearch(menuRawList, menuSearchWord)
+      : menuRawList) ?? []
 
-    return menuList?.map<CatalogDataNode>((item) => {
+    return menuList.map<CatalogDataNode>((item) => {
       const isLeaf = !isMenuFolder(item.type)
 
       return {
@@ -195,6 +208,10 @@ export function useMenuData(): MenuState {
       const treeData = arrayToTree(groupedMenus[catalogType], {
         customID: 'key',
         parentProperty: 'customData.catalog.parentId',
+      }) as CatalogDataNode[]
+
+      treeData.forEach((node) => {
+        attachLeafCount(node)
       })
 
       return {

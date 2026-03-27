@@ -1,12 +1,17 @@
-import type { Metadata } from 'next'
-import { redirect } from 'next/navigation'
+import { redirect, type LoaderFunctionArgs } from 'react-router'
 
-import { getPageTitle } from '../utils'
+import { getSessionUserFromRequest } from '@/server/auth'
 
-export const metadata: Metadata = {
-  title: getPageTitle(),
+export async function loader({ request }: LoaderFunctionArgs) {
+  const { user } = getSessionUserFromRequest(request)
+
+  if (!user) {
+    return redirect('/login')
+  }
+
+  return redirect('/projects')
 }
 
 export default function RootPage() {
-  return redirect('/home')
+  return null
 }

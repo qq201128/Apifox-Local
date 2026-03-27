@@ -1,214 +1,364 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
-import { current, produce } from 'immer'
-import { nanoid } from 'nanoid'
+import { useLocation } from 'react-router'
 
 import type { ApiMenuData } from '@/components/ApiMenu'
-import { apiDirectoryData, creator, recycleGroupData } from '@/data/remote'
-import { CatalogType } from '@/enums'
-import { getCatalogType, isMenuFolder } from '@/helpers'
-import type { RecycleCatalogType, RecycleData, RecycleDataItem } from '@/types'
-import { moveArrayItem } from '@/utils'
+import {
+  createGlobalParameters,
+  EMPTY_PROJECT_ENVIRONMENT_CONFIG,
+} from '@/project-environment-utils'
+import type {
+  ApiEnvironment,
+  ProjectEnvironmentConfig,
+  RecycleData,
+  RecycleDataItem,
+} from '@/types'
 
 interface MenuHelpers {
-  /** 添加一个新的菜单项到菜单列表中。 */
   addMenuItem: (menuData: ApiMenuData) => void
-  /** 从菜单列表中移除一个菜单项。 */
   removeMenuItem: (menuData: Pick<ApiMenuData, 'id'>) => void
-  /** 更新一个菜单项的信息。 */
   updateMenuItem: (menuData: Partial<ApiMenuData> & Pick<ApiMenuData, 'id'>) => void
-  /** 从回收站中恢复菜单项。 */
-  restoreMenuItem: (
-    menuData: Partial<ApiMenuData> & {
-      restoreId: RecycleDataItem['id']
-      catalogType: RecycleCatalogType
-    }
-  ) => void
-  /** 移动菜单项。 */
+  restoreMenuItem: (menuData: { restoreId: RecycleDataItem['id'] }) => void
+  restoreMenuItems: (recycleIds: RecycleDataItem['id'][]) => void
+  deleteRecycleItems: (recycleIds: RecycleDataItem['id'][]) => void
   moveMenuItem: (moveInfo: {
     dragKey: ApiMenuData['id']
     dropKey: ApiMenuData['id']
-    /** the drop position relative to the drop node, inside 0, top -1, bottom 1 */
     dropPosition: 0 | -1 | 1
   }) => void
+  updateProjectEnvironmentConfig: (config: ProjectEnvironmentConfig) => Promise<void>
+  reloadState: () => Promise<void>
 }
 
 interface MenuHelpersContextData extends MenuHelpers {
   menuRawList?: ApiMenuData[]
   recyleRawData?: RecycleData
-
+  projectEnvironments: ApiEnvironment[]
+  projectEnvironmentConfig: ProjectEnvironmentConfig
+  currentProjectEnvironmentId?: string
+  setCurrentProjectEnvironmentId: React.Dispatch<React.SetStateAction<string | undefined>>
   menuSearchWord?: string
   setMenuSearchWord?: React.Dispatch<React.SetStateAction<MenuHelpersContextData['menuSearchWord']>>
-
   apiDetailDisplay: 'name' | 'path'
   setApiDetailDisplay: React.Dispatch<
     React.SetStateAction<MenuHelpersContextData['apiDetailDisplay']>
   >
 }
 
+interface StatePayload {
+  menuRawList: ApiMenuData[]
+  recyleRawData: RecycleData
+  projectEnvironments: ApiEnvironment[]
+  projectEnvironmentConfig: ProjectEnvironmentConfig
+}
+
+interface ApiResult<T> {
+  ok: boolean
+  data: T
+  error: string | null
+}
+
 const MenuHelpersContext = createContext({} as MenuHelpersContextData)
+const getStateCacheKey = (projectId: string) => `project-state:${projectId}`
+const getEnvironmentCacheKey = (projectId: string) => `project-environment:${projectId}`
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeEnvironmentConfigShape(input: unknown): ProjectEnvironmentConfig {
+  if (!isRecord(input)) {
+    return EMPTY_PROJECT_ENVIRONMENT_CONFIG
+  }
+
+  const globalParameters = Array.isArray(input.globalParameters)
+    ? createGlobalParameters()
+    : {
+        ...createGlobalParameters(),
+        ...(isRecord(input.globalParameters) ? input.globalParameters : {}),
+      }
+
+  return {
+    ...EMPTY_PROJECT_ENVIRONMENT_CONFIG,
+    ...input,
+    globalParameters,
+    legacyGlobalParameters: Array.isArray(input.globalParameters)
+      ? input.globalParameters as ProjectEnvironmentConfig['legacyGlobalParameters']
+      : Array.isArray(input.legacyGlobalParameters)
+        ? input.legacyGlobalParameters as ProjectEnvironmentConfig['legacyGlobalParameters']
+        : [],
+  }
+}
+
+function normalizeStatePayload(state: StatePayload): StatePayload {
+  return {
+    ...state,
+    projectEnvironments: state.projectEnvironments ?? [],
+    projectEnvironmentConfig: normalizeEnvironmentConfigShape(state.projectEnvironmentConfig),
+  }
+}
+
+function readCachedState(projectId: string): StatePayload | undefined {
+  try {
+    const raw = window.sessionStorage.getItem(getStateCacheKey(projectId))
+    if (!raw) {
+      return undefined
+    }
+    return normalizeStatePayload(JSON.parse(raw) as StatePayload)
+  }
+  catch {
+    return undefined
+  }
+}
+
+function writeCachedState(projectId: string, state: StatePayload) {
+  try {
+    window.sessionStorage.setItem(getStateCacheKey(projectId), JSON.stringify(state))
+  }
+  catch {
+    // ignore storage write errors
+  }
+}
+
+function readCachedEnvironmentId(projectId: string) {
+  try {
+    return window.localStorage.getItem(getEnvironmentCacheKey(projectId)) ?? undefined
+  }
+  catch {
+    return undefined
+  }
+}
+
+function writeCachedEnvironmentId(projectId: string, environmentId?: string) {
+  try {
+    if (environmentId) {
+      window.localStorage.setItem(getEnvironmentCacheKey(projectId), environmentId)
+      return
+    }
+
+    window.localStorage.removeItem(getEnvironmentCacheKey(projectId))
+  }
+  catch {
+    // ignore storage write errors
+  }
+}
+
+function useProjectId() {
+  const { pathname } = useLocation()
+  const parts = pathname.split('/').filter(Boolean)
+
+  if (parts[0] === 'projects' && parts[1]) {
+    return parts[1]
+  }
+
+  return undefined
+}
 
 export function MenuHelpersContextProvider(props: React.PropsWithChildren) {
   const { children } = props
 
+  const projectId = useProjectId()
   const [menuRawList, setMenuRawList] = useState<ApiMenuData[]>()
   const [recyleRawData, setRecyleRawData] = useState<RecycleData>()
-
-  useEffect(() => {
-    setMenuRawList(apiDirectoryData)
-    setRecyleRawData(recycleGroupData)
-  }, [])
-
+  const [projectEnvironments, setProjectEnvironments] = useState<ApiEnvironment[]>([])
+  const [projectEnvironmentConfig, setProjectEnvironmentConfig]
+    = useState<ProjectEnvironmentConfig>(EMPTY_PROJECT_ENVIRONMENT_CONFIG)
+  const [currentProjectEnvironmentId, setCurrentProjectEnvironmentId] = useState<string>()
   const [menuSearchWord, setMenuSearchWord] = useState<string>()
   const [apiDetailDisplay, setApiDetailDisplay]
     = useState<MenuHelpersContextData['apiDetailDisplay']>('name')
 
+  const applyState = useCallback((state: StatePayload) => {
+    const normalizedState = normalizeStatePayload(state)
+
+    setMenuRawList(normalizedState.menuRawList)
+    setRecyleRawData(normalizedState.recyleRawData)
+    setProjectEnvironments(normalizedState.projectEnvironments)
+    setProjectEnvironmentConfig(normalizedState.projectEnvironmentConfig)
+    if (projectId) {
+      writeCachedState(projectId, normalizedState)
+    }
+  }, [projectId])
+
+  const requestState = useCallback(
+    async (input: RequestInfo, init?: RequestInit) => {
+      const response = await fetch(input, {
+        ...init,
+        credentials: 'include',
+      })
+      const payload = await response.json() as ApiResult<StatePayload>
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error ?? '请求失败')
+      }
+
+      applyState(payload.data)
+    },
+    [applyState],
+  )
+
+  const reloadState = useCallback(async () => {
+    if (!projectId) {
+      setMenuRawList(undefined)
+      setRecyleRawData(undefined)
+      setProjectEnvironments([])
+      setProjectEnvironmentConfig(EMPTY_PROJECT_ENVIRONMENT_CONFIG)
+      return
+    }
+
+    try {
+      await requestState(`/api/v1/projects/${projectId}/state`, { method: 'GET' })
+    }
+    catch (error) {
+      console.error(error)
+    }
+  }, [projectId, requestState])
+
+  useEffect(() => {
+    if (projectId) {
+      const cachedState = readCachedState(projectId)
+      if (cachedState) {
+        applyState(cachedState)
+      }
+      setCurrentProjectEnvironmentId(readCachedEnvironmentId(projectId))
+    }
+    void reloadState()
+  }, [applyState, projectId, reloadState])
+
+  useEffect(() => {
+    if (!projectId) {
+      setCurrentProjectEnvironmentId(undefined)
+      return
+    }
+
+    if (currentProjectEnvironmentId) {
+      const exists = projectEnvironments.some(({ id }) => id === currentProjectEnvironmentId)
+
+      if (exists) {
+        writeCachedEnvironmentId(projectId, currentProjectEnvironmentId)
+        return
+      }
+    }
+
+    const fallbackId = projectEnvironments.at(0)?.id
+    setCurrentProjectEnvironmentId(fallbackId)
+    writeCachedEnvironmentId(projectId, fallbackId)
+  }, [currentProjectEnvironmentId, projectEnvironments, projectId])
+
   const menuHelpers = useMemo<MenuHelpers>(() => {
+    const guardProject = () => {
+      if (!projectId) {
+        console.error(new Error('当前不在项目页面'))
+        return undefined
+      }
+
+      return projectId
+    }
+
+    const mutateRecycleItems = (method: 'DELETE' | 'POST', recycleIds: string[]) => {
+      const id = guardProject()
+
+      if (!id || recycleIds.length === 0) {
+        return
+      }
+
+      void requestState(`/api/v1/projects/${id}/recycle`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recycleIds }),
+      }).catch((error) => {
+        console.error(error)
+      })
+    }
+
     return {
+      reloadState,
       addMenuItem: (menuData) => {
-        setMenuRawList((list = []) => [...list, menuData])
-      },
-
-      removeMenuItem: ({ id }) => {
-        const newMenuRawList = menuRawList?.filter((item) => {
-          const shouldRemove = item.id === id || item.parentId === id
-
-          if (shouldRemove) {
-            setRecyleRawData((d) =>
-              d
-                ? produce(d, (draft) => {
-                    let catalogType = getCatalogType(item.type)
-
-                    if (catalogType === CatalogType.Markdown) {
-                      catalogType = CatalogType.Http
-                    }
-
-                    if (
-                      catalogType === CatalogType.Http
-                      || catalogType === CatalogType.Schema
-                      || catalogType === CatalogType.Request
-                    ) {
-                      const list = draft[catalogType].list
-
-                      draft[catalogType].list = [
-                        { id: nanoid(6), expiredAt: '30天', creator, deletedItem: item },
-                        ...(list ?? []),
-                      ]
-                    }
-                  })
-                : d,
-            )
-          }
-
-          return !shouldRemove
+        const id = guardProject()
+        if (!id) {
+          return
+        }
+        void requestState(`/api/v1/projects/${id}/menu-items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(menuData),
+        }).catch((error) => {
+          console.error(error)
         })
-
-        setMenuRawList(newMenuRawList)
       },
-
-      updateMenuItem: ({ id, ...rest }) => {
-        setMenuRawList((list) =>
-          list?.map((item) => {
-            if (item.id === id) {
-              return {
-                ...item,
-                ...rest,
-                data: { ...item.data, ...rest.data, name: rest.name ?? item.name },
-              } as ApiMenuData
-            }
-
-            return item
-          }),
-        )
-      },
-
-      restoreMenuItem: ({ restoreId, catalogType }) => {
-        const newRecyleRawData = produce(recyleRawData, (draft) => {
-          if (draft) {
-            const list = draft[catalogType].list
-
-            draft[catalogType].list = list?.filter((li) => {
-              const shouldRestore = li.id === restoreId
-
-              if (shouldRestore) {
-                const apiMenuDataItem = current(li).deletedItem
-
-                setMenuRawList((rawList = []) => {
-                  return [...rawList, apiMenuDataItem]
-                })
-              }
-
-              return !shouldRestore
-            })
-          }
+      removeMenuItem: ({ id: menuId }) => {
+        const id = guardProject()
+        if (!id) {
+          return
+        }
+        void requestState(`/api/v1/projects/${id}/menu-items/${menuId}`, {
+          method: 'DELETE',
+        }).catch((error) => {
+          console.error(error)
         })
-
-        setRecyleRawData(newRecyleRawData)
       },
-
+      updateMenuItem: ({ id: menuId, ...rest }) => {
+        const id = guardProject()
+        if (!id) {
+          return
+        }
+        void requestState(`/api/v1/projects/${id}/menu-items/${menuId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(rest),
+        }).catch((error) => {
+          console.error(error)
+        })
+      },
+      restoreMenuItem: ({ restoreId }) => {
+        mutateRecycleItems('POST', [restoreId])
+      },
+      restoreMenuItems: (recycleIds) => {
+        mutateRecycleItems('POST', recycleIds)
+      },
+      deleteRecycleItems: (recycleIds) => {
+        mutateRecycleItems('DELETE', recycleIds)
+      },
       moveMenuItem: ({ dragKey, dropKey, dropPosition }) => {
-        setMenuRawList((list = []) => {
-          const { dragMenu, dropMenu, dragMenuIdx, dropMenuIdx } = list.reduce<{
-            dragMenu: ApiMenuData | null
-            dropMenu: ApiMenuData | null
-            dragMenuIdx: number | null
-            dropMenuIdx: number | null
-          }>(
-            (acc, item, idx) => {
-              if (item.id === dragKey) {
-                acc.dragMenu = item
-                acc.dragMenuIdx = idx
-              }
-              else if (item.id === dropKey) {
-                acc.dropMenu = item
-                acc.dropMenuIdx = idx
-              }
-
-              return acc
-            },
-            { dragMenu: null, dropMenu: null, dragMenuIdx: null, dropMenuIdx: null },
-          )
-
-          if (
-            dragMenu
-            && dropMenu
-            && typeof dragMenuIdx === 'number'
-            && typeof dropMenuIdx === 'number'
-          ) {
-            return produce(list, (draft) => {
-              if (isMenuFolder(dropMenu.type) && dropPosition === 0) {
-                draft[dragMenuIdx].parentId = dropMenu.id
-                moveArrayItem(draft, dragMenuIdx, dropMenuIdx + 1)
-              }
-              else if (dropPosition === 1) {
-                if (dragMenu.parentId !== dropMenu.parentId) {
-                  draft[dragMenuIdx].parentId = dropMenu.parentId
-                  moveArrayItem(draft, dragMenuIdx, dropMenuIdx + 1)
-                }
-                else {
-                  moveArrayItem(draft, dragMenuIdx, dropMenuIdx + 1)
-                }
-              }
-            })
-          }
-
-          return list
+        const id = guardProject()
+        if (!id) {
+          return
+        }
+        void requestState(`/api/v1/projects/${id}/menu-items/move`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dragKey, dropKey, dropPosition }),
+        }).catch((error) => {
+          console.error(error)
+        })
+      },
+      updateProjectEnvironmentConfig: async (config) => {
+        const id = guardProject()
+        if (!id) {
+          return
+        }
+        await requestState(`/api/v1/projects/${id}/environments`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ config }),
         })
       },
     }
-  }, [menuRawList, recyleRawData])
+  }, [projectId, reloadState, requestState])
 
   return (
     <MenuHelpersContext.Provider
       value={{
         menuRawList,
         recyleRawData,
-
+        projectEnvironments,
+        projectEnvironmentConfig,
+        currentProjectEnvironmentId,
+        setCurrentProjectEnvironmentId,
         menuSearchWord,
         setMenuSearchWord,
         apiDetailDisplay,
         setApiDetailDisplay,
-
         ...menuHelpers,
       }}
     >

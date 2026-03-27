@@ -1,4 +1,5 @@
 import { useEvent } from 'react-use-event-hook'
+import useResizeObserver from 'use-resize-observer'
 
 import { ConfigProvider, Tree, type TreeProps } from 'antd'
 
@@ -19,6 +20,8 @@ import { css } from '@emotion/css'
 
 type TreeOnSelect = NonNullable<TreeProps['onSelect']>
 
+const TREE_MIN_VIEWPORT_HEIGHT = 240
+
 /**
  * 侧边的菜单目录，以文件树的形式展示。
  *
@@ -33,8 +36,13 @@ export function ApiMenu() {
 
   const { tabItems, activeTabKey } = useMenuTabContext()
   const { activeTabItem, addTabItem } = useMenuTabHelpers()
+  const { ref: treeContainerRef, height: treeContainerHeight } = useResizeObserver<HTMLDivElement>()
 
   const selectedKeys = activeTabKey ? [activeTabKey] : undefined
+  const treeViewportHeight = Math.max(
+    Math.floor(treeContainerHeight ?? TREE_MIN_VIEWPORT_HEIGHT),
+    TREE_MIN_VIEWPORT_HEIGHT,
+  )
 
   const switchExpandedKeys = useEvent((menuId: string) => {
     if (expandedMenuKeys.includes(menuId)) {
@@ -49,10 +57,6 @@ export function ApiMenu() {
     const menuId = node.key
 
     if (typeof menuId === 'string') {
-      if (!node.isLeaf && isTopMenuType(node.key)) {
-        switchExpandedKeys(menuId)
-      }
-
       const isTabPresent = tabItems.some(({ key }) => key === menuId)
 
       if (isTabPresent) {
@@ -143,54 +147,64 @@ export function ApiMenu() {
         },
       }}
     >
-      {!!menuTree && (
-        <Tree.DirectoryTree
-          blockNode
-          showIcon
-          allowDrop={({ dragNode, dropNode }) => {
-            if (dropNode.className?.includes('top-folder')) {
-              return false
-            }
+      <div ref={treeContainerRef} className="h-full overflow-hidden">
+        {!!menuTree && (
+          <Tree.DirectoryTree
+            blockNode
+            showIcon
+            allowDrop={({ dragNode, dropNode }) => {
+              if (dropNode.className?.includes('top-folder')) {
+                return false
+              }
 
-            return isMenuSameGroup(
-              (dragNode as CatalogDataNode).customData.catalog,
-              (dropNode as CatalogDataNode).customData.catalog,
-            )
-          }}
-          draggable={{
-            icon: false,
-            nodeDraggable: (node) => {
-              return !node.className?.includes('top-folder')
-            },
-          }}
-          expandedKeys={expandedMenuKeys}
-          rootClassName={styles.menuTree}
-          selectedKeys={selectedKeys}
-          switcherIcon={(node) => {
-            const nodeData = node.data as CatalogDataNode | undefined
-            const hasChildren = nodeData?.children?.length
-
-            if (hasChildren) {
-              return (
-                <SwitcherIcon
-                  onClick={() => {
-                    const menuId = nodeData.key
-
-                    if (typeof menuId === 'string') {
-                      switchExpandedKeys(menuId)
-                    }
-                  }}
-                />
+              return isMenuSameGroup(
+                (dragNode as CatalogDataNode).customData.catalog,
+                (dropNode as CatalogDataNode).customData.catalog,
               )
-            }
+            }}
+            draggable={{
+              icon: false,
+              nodeDraggable: (node) => {
+                return !node.className?.includes('top-folder')
+              },
+            }}
+            expandedKeys={expandedMenuKeys}
+            height={treeViewportHeight}
+            rootClassName={styles.menuTree}
+            selectedKeys={selectedKeys}
+            switcherIcon={(node) => {
+              const nodeData = node.data as CatalogDataNode | undefined
+              const hasChildren = nodeData?.children?.length
 
-            return null
-          }}
-          treeData={menuTree}
-          onDrop={handleDrop}
-          onSelect={handleMenuSelect}
-        />
-      )}
+              if (hasChildren) {
+                return (
+                  <SwitcherIcon
+                    onClick={() => {
+                      const menuId = nodeData.key
+
+                      if (typeof menuId === 'string') {
+                        switchExpandedKeys(menuId)
+                      }
+                    }}
+                  />
+                )
+              }
+
+              return null
+            }}
+            treeData={menuTree}
+            onDrop={handleDrop}
+            onDoubleClick={(_, node) => {
+              const menuId = node.key
+
+              if (typeof menuId === 'string' && !node.isLeaf) {
+                switchExpandedKeys(menuId)
+              }
+            }}
+            onSelect={handleMenuSelect}
+          />
+        )}
+      </div>
     </ConfigProvider>
   )
 }

@@ -1,8 +1,9 @@
 {
-  "short_name": "xxx",
-  "name": "xxx",
-  "description": "xxx",
-  "theme_color": "#334155",
+  "short_name": "接口管理",
+  "name": "API 接口管理台",
+  "description": "用于接口设计、文档整理与项目协作的前端应用。",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
   "icons": [
     {
       "src": "/favicon.svg",
