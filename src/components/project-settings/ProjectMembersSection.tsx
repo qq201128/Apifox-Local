@@ -240,7 +240,7 @@ export function ProjectMembersSection(props: ProjectMembersSectionProps) {
             layout="inline"
             onFinish={handleInviteCreate}
           >
-            <Form.Item initialValue="viewer" name="role">
+            <Form.Item name="role">
               <Select options={memberRoleOptions} style={{ width: 120 }} />
             </Form.Item>
 

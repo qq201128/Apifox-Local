@@ -96,37 +96,37 @@ export function EditableTable<RecordType = AnyType>(props: EditableTableProps<Re
   const sensor = useSensor(PointerSensor, { activationConstraint: { distance: 10 } })
 
   return (
-    <table
-      className="w-full border-spacing-0"
-      style={{
-        border: `1px solid ${token.colorBorderSecondary}`,
-        borderRadius: token.borderRadius,
-      }}
-    >
-      <colgroup>
-        {columns?.map((col, idx) => {
-          return <col key={col.dataIndex ?? `${idx}`} width={col.width} />
-        })}
-      </colgroup>
-
-      <thead>
-        <tr>
+    <DndContext sensors={[sensor]}>
+      <table
+        className="w-full border-spacing-0"
+        style={{
+          border: `1px solid ${token.colorBorderSecondary}`,
+          borderRadius: token.borderRadius,
+        }}
+      >
+        <colgroup>
           {columns?.map((col, idx) => {
-            return (
-              <th
-                key={col.dataIndex ?? `${idx}`}
-                className={`p-1 text-left font-normal ${styles.th}`}
-                scope="col"
-              >
-                {col.title}
-              </th>
-            )
+            return <col key={col.dataIndex ?? `${idx}`} width={col.width} />
           })}
-        </tr>
-      </thead>
+        </colgroup>
 
-      <tbody>
-        <DndContext sensors={[sensor]}>
+        <thead>
+          <tr>
+            {columns?.map((col, idx) => {
+              return (
+                <th
+                  key={col.dataIndex ?? `${idx}`}
+                  className={`p-1 text-left font-normal ${styles.th}`}
+                  scope="col"
+                >
+                  {col.title}
+                </th>
+              )
+            })}
+          </tr>
+        </thead>
+
+        <tbody>
           <SortableContext
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-expect-error
@@ -164,8 +164,8 @@ export function EditableTable<RecordType = AnyType>(props: EditableTableProps<Re
               </DraggableTabNode>
             ))}
           </SortableContext>
-        </DndContext>
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </DndContext>
   )
 }

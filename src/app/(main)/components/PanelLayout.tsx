@@ -120,6 +120,7 @@ export function PanelLayout(props: PanelLayoutProps) {
               collapsible
               className="flex h-full flex-col overflow-hidden"
               defaultSize={defaultSize}
+              id="panel-left"
               maxSize={maxSize}
               minSize={minSize}
               order={1}
@@ -145,6 +146,7 @@ export function PanelLayout(props: PanelLayoutProps) {
 
         <Panel
           className="relative flex h-full flex-1 flex-col overflow-y-auto overflow-x-hidden"
+          id="panel-right"
           order={2}
         >
           <div className="flex-1 overflow-auto">{right}</div>

@@ -259,6 +259,31 @@ function buildSchemaExample(schema?: JsonSchema): unknown {
   }
 }
 
+function stringifyParameterExample(example: Parameter['example']): string {
+  if (Array.isArray(example)) {
+    return example.join(',')
+  }
+
+  if (typeof example === 'string') {
+    return example
+  }
+
+  return ''
+}
+
+function buildQueryStringForCopy(params?: Parameter[]): string {
+  const queryText = (params ?? [])
+    .filter(param => param.enable !== false && param.name)
+    .map((param) => {
+      const key = encodeURIComponent(param.name ?? '')
+      const value = encodeURIComponent(stringifyParameterExample(param.example))
+      return `${key}=${value}`
+    })
+    .join('&')
+
+  return queryText ? `?${queryText}` : ''
+}
+
 export function ApiDoc() {
   const { token } = theme.useToken()
 
@@ -452,6 +477,7 @@ export function ApiDoc() {
   const queryParams = docValue.parameters?.query
   const headerParams = docValue.parameters?.header
   const cookieParams = docValue.parameters?.cookie
+  const queryStringForCopy = buildQueryStringForCopy(queryParams)
   const normalizedRequestSchema = docValue.requestBody?.jsonSchema
     ? normalizeSchemaForDisplay(docValue.requestBody.jsonSchema)
     : undefined
@@ -583,6 +609,26 @@ export function ApiDoc() {
 
                 {hasQueryParams && (
                   <Card className={styles.card} title="Query 参数">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <code className="overflow-auto rounded border px-2 py-1 text-xs">
+                        {queryStringForCopy || '?'}
+                      </code>
+                      <Button
+                        size="small"
+                        type="link"
+                        onClick={() => {
+                          if (!queryStringForCopy) {
+                            messageApi.warning('暂无可复制的 Query 参数')
+                            return
+                          }
+                          void navigator.clipboard.writeText(queryStringForCopy).then(() => {
+                            messageApi.success('Query 参数已复制')
+                          })
+                        }}
+                      >
+                        复制 Query
+                      </Button>
+                    </div>
                     <div className="flex flex-col gap-3">
                       {queryParams?.map((param) => <ApiParameter key={param.id} param={param} />)}
                     </div>
@@ -664,7 +710,25 @@ export function ApiDoc() {
                       <div className="schema-panel">
                         <div className="schema-sub-title">
                           <span>示例</span>
-                          <span>JSON</span>
+                          <Space size={8}>
+                            <span>JSON</span>
+                            <Button
+                              size="small"
+                              type="link"
+                              onClick={() => {
+                                const bodyExample = JSON.stringify(
+                                  requestSchemaExample ?? normalizedRequestSchema,
+                                  null,
+                                  2,
+                                )
+                                void navigator.clipboard.writeText(bodyExample).then(() => {
+                                  messageApi.success('Body 示例已复制')
+                                })
+                              }}
+                            >
+                              复制
+                            </Button>
+                          </Space>
                         </div>
                         <pre className="schema-code">
                           {JSON.stringify(requestSchemaExample ?? normalizedRequestSchema, null, 2)}

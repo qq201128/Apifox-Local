@@ -39,7 +39,7 @@ function ValueRowsTable(props: {
       }}
     >
       <Input
-        bordered={false}
+        variant="borderless"
         disabled={!editable}
         placeholder="添加变量"
         value={row.name}
@@ -48,7 +48,7 @@ function ValueRowsTable(props: {
         }}
       />
       <Input
-        bordered={false}
+        variant="borderless"
         disabled={!editable}
         placeholder="远程值"
         value={row.remoteValue}
@@ -57,7 +57,7 @@ function ValueRowsTable(props: {
         }}
       />
       <Input
-        bordered={false}
+        variant="borderless"
         disabled={!editable}
         placeholder="本地值"
         value={row.localValue}

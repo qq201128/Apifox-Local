@@ -166,7 +166,7 @@ export function EnvironmentEditor(props: {
                 }}
               >
                 <Input
-                  bordered={false}
+                  variant="borderless"
                   disabled={!editable}
                   placeholder="默认模块"
                   value={item.name}
@@ -175,7 +175,7 @@ export function EnvironmentEditor(props: {
                   }}
                 />
                 <Input
-                  bordered={false}
+                  variant="borderless"
                   disabled={!editable}
                   placeholder="https://api.example.com"
                   value={item.url}
