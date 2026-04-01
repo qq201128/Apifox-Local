@@ -9,8 +9,6 @@ import type { ApiEnvironment, ProjectEnvironmentConfig, RecycleData, RecycleData
 import { RECYCLE_TTL_MS } from './constants'
 import {
   clearExpiredRecycleItems,
-  clearMenuItems,
-  clearRecycleItems,
   deleteMenuItems,
   deleteRecycleItems,
   getMaxSortOrder,
@@ -428,27 +426,6 @@ export function moveProjectMenuItem(payload: {
   })
 
   return getProjectState(payload.projectId)
-}
-
-export function replaceProjectStateWithMenuItems(projectId: string, menuItems: ApiMenuData[]) {
-  runInTransaction(() => {
-    clearMenuItems(projectId)
-    clearRecycleItems(projectId)
-
-    menuItems.forEach((item, index) => {
-      insertMenuItem({
-        projectId,
-        id: item.id,
-        parentId: normalizeParentId(item.parentId),
-        name: item.name,
-        type: item.type,
-        dataJson: item.data ? JSON.stringify(item.data) : undefined,
-        sortOrder: index + 1,
-      })
-    })
-  })
-
-  return getProjectState(projectId)
 }
 
 export function createDefaultApiDetails(menuName: string) {

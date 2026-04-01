@@ -17,6 +17,7 @@ import { useLocation } from 'react-router'
 
 import { ProjectEnvironmentsPanel } from '@/components/project-settings/ProjectEnvironmentsPanel'
 import { ApiTransferPanel } from '@/components/project-settings/ApiTransferPanel'
+import { SharedWorkspacePanel } from '@/components/project-settings/SharedWorkspacePanel'
 import {
   ProjectMembersSection,
   type InvitationItem,
@@ -32,6 +33,7 @@ const enum SettingsSectionKey {
   Members = 'members',
   Environments = 'environments',
   ImportApi = 'import-api',
+  SharedWorkspace = 'shared-workspace',
 }
 
 interface ProjectInfo {
@@ -67,6 +69,17 @@ const items: MenuItem[] = [
     type: 'group',
     children: [{ key: SettingsSectionKey.ImportApi, label: '导入接口' }],
   },
+  {
+    key: 'g3',
+    label: (
+      <div className="flex items-center gap-2">
+        <LayersIcon size={16} />
+        协同共享
+      </div>
+    ),
+    type: 'group',
+    children: [{ key: SettingsSectionKey.SharedWorkspace, label: '共享文件与在线文档' }],
+  },
 ]
 
 function sectionMeta(section: SettingsSectionKey) {
@@ -84,9 +97,16 @@ function sectionMeta(section: SettingsSectionKey) {
     }
   }
 
+  if (section === SettingsSectionKey.SharedWorkspace) {
+    return {
+      title: '共享文件与在线文档',
+      description: '项目成员可上传下载共享文件，并在同一空间协作在线文档。',
+    }
+  }
+
   return {
     title: '导入接口',
-    description: '导入 OpenAPI 或 Postman 文档，并替换当前项目资源。',
+    description: '导入 OpenAPI 或 Postman 文档，并静默合并到当前项目资源。',
   }
 }
 
@@ -119,6 +139,10 @@ export default function SettingsPage() {
       return SettingsSectionKey.ImportApi
     }
 
+    if (section === SettingsSectionKey.SharedWorkspace) {
+      return SettingsSectionKey.SharedWorkspace
+    }
+
     return SettingsSectionKey.Members
   })
   const [members, setMembers] = useState<MemberItem[]>([])
@@ -134,6 +158,7 @@ export default function SettingsPage() {
 
   const canManageMembers = Boolean(currentUserId && project?.ownerId === currentUserId)
   const canManageEnvironments = projectRole === 'owner' || projectRole === 'editor'
+  const canEditSharedWorkspace = projectRole === 'owner' || projectRole === 'editor'
   const isMembersSection = selectedSection === SettingsSectionKey.Members
   const isEnvironmentsSection = selectedSection === SettingsSectionKey.Environments
   const currentSectionMeta = sectionMeta(selectedSection)
@@ -217,6 +242,11 @@ export default function SettingsPage() {
       return
     }
 
+    if (section === SettingsSectionKey.SharedWorkspace) {
+      setSelectedSection(SettingsSectionKey.SharedWorkspace)
+      return
+    }
+
     setSelectedSection(SettingsSectionKey.Members)
   }, [search])
 
@@ -282,9 +312,13 @@ export default function SettingsPage() {
               ? (
                   <ProjectEnvironmentsPanel editable={canManageEnvironments} />
                 )
-            : (
+              : selectedSection === SettingsSectionKey.ImportApi
+                ? (
                 <ApiTransferPanel />
-              )}
+                  )
+                : (
+                    <SharedWorkspacePanel editable={canEditSharedWorkspace} projectId={projectId} />
+                  )}
         </div>
       )}
     />

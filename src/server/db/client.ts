@@ -101,6 +101,48 @@ function createDb() {
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS shared_docs (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      creator_user_id TEXT NOT NULL,
+      doc_type TEXT NOT NULL DEFAULT 'markdown' CHECK (doc_type IN ('markdown', 'excel')),
+      title TEXT NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      y_state_base64 TEXT NOT NULL DEFAULT '',
+      version INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (creator_user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS shared_files (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      uploader_user_id TEXT NOT NULL,
+      linked_doc_id TEXT,
+      name TEXT NOT NULL,
+      size INTEGER NOT NULL DEFAULT 0,
+      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+      storage_path TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (uploader_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (linked_doc_id) REFERENCES shared_docs(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS shared_doc_presence (
+      project_id TEXT NOT NULL,
+      doc_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      is_typing INTEGER NOT NULL DEFAULT 0,
+      last_seen_at INTEGER NOT NULL,
+      PRIMARY KEY (project_id, doc_id, user_id),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (doc_id) REFERENCES shared_docs(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id);
@@ -110,7 +152,26 @@ function createDb() {
     CREATE INDEX IF NOT EXISTS idx_menu_items_project_sort ON menu_items(project_id, sort_order);
     CREATE INDEX IF NOT EXISTS idx_recycle_items_project ON recycle_items(project_id);
     CREATE INDEX IF NOT EXISTS idx_recycle_items_expires_at ON recycle_items(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_shared_files_project_created_at ON shared_files(project_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_shared_files_linked_doc_id ON shared_files(linked_doc_id);
+    CREATE INDEX IF NOT EXISTS idx_shared_docs_project_updated_at ON shared_docs(project_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_shared_doc_presence_seen_at ON shared_doc_presence(last_seen_at);
   `)
+
+  const hasDocType = db.prepare(`
+    SELECT 1 AS yes
+    FROM pragma_table_info('shared_docs')
+    WHERE name = 'doc_type'
+    LIMIT 1
+  `).get() as { yes: number } | undefined
+
+  if (!hasDocType) {
+    db.exec(`
+      ALTER TABLE shared_docs
+      ADD COLUMN doc_type TEXT NOT NULL DEFAULT 'markdown'
+      CHECK (doc_type IN ('markdown', 'excel'));
+    `)
+  }
 
   return db
 }

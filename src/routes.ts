@@ -75,4 +75,36 @@ export default [
     'api/v1/projects/:projectId/requests/run',
     'app/api/v1/projects/[projectId]/requests/run/route.ts',
   ),
+  route(
+    'api/v1/projects/:projectId/shared-files',
+    'app/api/v1/projects/[projectId]/shared-files/route.ts',
+  ),
+  route(
+    'api/v1/projects/:projectId/shared-files/:fileId',
+    'app/api/v1/projects/[projectId]/shared-files/[fileId]/route.ts',
+  ),
+  route(
+    'api/v1/projects/:projectId/shared-files/:fileId/download',
+    'app/api/v1/projects/[projectId]/shared-files/[fileId]/download/route.ts',
+  ),
+  route(
+    'api/v1/projects/:projectId/shared-docs',
+    'app/api/v1/projects/[projectId]/shared-docs/route.ts',
+  ),
+  route(
+    'api/v1/projects/:projectId/shared-docs/:docId',
+    'app/api/v1/projects/[projectId]/shared-docs/[docId]/route.ts',
+  ),
+  route(
+    'api/v1/projects/:projectId/shared-docs/:docId/export',
+    'app/api/v1/projects/[projectId]/shared-docs/[docId]/export/route.ts',
+  ),
+  route(
+    'api/v1/projects/:projectId/shared-docs/:docId/collab',
+    'app/api/v1/projects/[projectId]/shared-docs/[docId]/collab/route.ts',
+  ),
+  route(
+    'api/v1/projects/:projectId/shared-docs/:docId/presence',
+    'app/api/v1/projects/[projectId]/shared-docs/[docId]/presence/route.ts',
+  ),
 ] satisfies RouteConfig

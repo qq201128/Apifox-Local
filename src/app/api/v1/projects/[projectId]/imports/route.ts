@@ -4,8 +4,8 @@ import { fail, ok } from '@/server/api-response'
 import { requireRouteParam } from '@/router/route-param'
 import { getSessionUserFromRequest } from '@/server/auth'
 import { importApiDocumentToMenuItems } from '@/server/api-document-import'
+import { mergeProjectStateWithMenuItems } from '@/server/project-import'
 import { ensureProjectPermission } from '@/server/project-access'
-import { replaceProjectStateWithMenuItems } from '@/server/project-state'
 
 async function importProjectDocument(request: Request, projectId: string) {
   const routeTag = '[api][projects/imports]'
@@ -52,8 +52,8 @@ async function importProjectDocument(request: Request, projectId: string) {
     const menuItems = importApiDocumentToMenuItems(content, filename)
     console.warn(`${routeTag} step=import_document projectId=${projectId} userId=${user.id} elapsedMs=${Date.now() - lastMark} menuItems=${menuItems.length}`)
     lastMark = Date.now()
-    const nextState = replaceProjectStateWithMenuItems(projectId, menuItems)
-    console.warn(`${routeTag} step=replace_project_state projectId=${projectId} userId=${user.id} elapsedMs=${Date.now() - lastMark}`)
+    const nextState = mergeProjectStateWithMenuItems(projectId, menuItems)
+    console.warn(`${routeTag} step=merge_project_state projectId=${projectId} userId=${user.id} elapsedMs=${Date.now() - lastMark}`)
     console.warn(`${routeTag} step=done projectId=${projectId} userId=${user.id} totalMs=${Date.now() - startedAt}`)
 
     return ok(nextState)

@@ -121,10 +121,6 @@ export function ApiTransferPanel() {
       return
     }
 
-    if (!window.confirm('导入将全量替换当前项目数据，是否继续？')) {
-      return
-    }
-
     setIsImporting(true)
     setImportProgress(0)
     setImportFileName(file.name)
@@ -150,7 +146,7 @@ export function ApiTransferPanel() {
       }
 
       setImportProgress(100)
-      msgApi.open({ key: 'api-import', type: 'success', content: '导入成功' })
+      msgApi.open({ key: 'api-import', type: 'success', content: '导入成功，已合并到当前项目' })
       await reloadState()
     }
     catch (error) {
@@ -176,10 +172,10 @@ export function ApiTransferPanel() {
         <Typography.Title level={4}>导入接口</Typography.Title>
         <Typography.Paragraph type="secondary">
           支持导入 OpenAPI 3.x 的 JSON 或 YAML，以及 Postman Collection v2/v2.1 的 JSON 文件。
-          导入后会直接替换当前项目里的接口、请求目录与模型数据。
+          导入后会静默合并到当前项目里的接口、请求目录与模型数据，不会清空已有内容。
         </Typography.Paragraph>
-        <Typography.Paragraph className="!mb-4" type="danger">
-          导入会覆盖当前项目数据，请先确认文件内容。
+        <Typography.Paragraph className="!mb-4" type="secondary">
+          选择文件后会直接开始导入，不再弹出覆盖确认。
         </Typography.Paragraph>
 
         <Space direction="vertical" size={12}>
