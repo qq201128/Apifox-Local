@@ -1,3 +1,5 @@
+import { stripImportedTimestampSuffix } from './document-import-utils'
+
 const PATH_PREFIX_SEGMENTS = new Set(['api', 'apis', 'openapi', 'swagger'])
 
 export const DEFAULT_OPENAPI_GROUP_NAME = '未分组'
@@ -61,14 +63,14 @@ export function getOpenApiGroupName(operation: Record<string, unknown>, pathName
   const controller = controllerCandidates.find((item): item is string => typeof item === 'string' && item.trim().length > 0)
 
   if (controller) {
-    return controller.trim()
+    return stripImportedTimestampSuffix(controller)
   }
 
   const operationId
     = typeof operation.operationId === 'string' ? pickControllerFromOperationId(operation.operationId) : undefined
 
   if (operationId) {
-    return operationId
+    return stripImportedTimestampSuffix(operationId)
   }
 
   const tagGroup = Array.isArray(operation.tags)
@@ -76,8 +78,8 @@ export function getOpenApiGroupName(operation: Record<string, unknown>, pathName
     : undefined
 
   if (tagGroup) {
-    return tagGroup.trim()
+    return stripImportedTimestampSuffix(tagGroup)
   }
 
-  return getPathGroupName(pathName) ?? DEFAULT_OPENAPI_GROUP_NAME
+  return stripImportedTimestampSuffix(getPathGroupName(pathName) ?? DEFAULT_OPENAPI_GROUP_NAME)
 }

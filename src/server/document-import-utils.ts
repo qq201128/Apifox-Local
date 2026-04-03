@@ -2,6 +2,8 @@ import * as yaml from 'yaml'
 
 import { ContentType } from '@/enums'
 
+const IMPORTED_NAME_TIMESTAMP_SUFFIX = /[-_]20\d{12}$/
+
 function getYamlParse() {
   const parser = (yaml as { parse?: (input: string) => unknown }).parse
     ?? (yaml as { default?: { parse?: (input: string) => unknown } }).default?.parse
@@ -66,4 +68,11 @@ export function toParamExample(value: unknown) {
   }
 
   return undefined
+}
+
+export function stripImportedTimestampSuffix(name: string) {
+  const normalized = name.trim()
+  const stripped = normalized.replace(IMPORTED_NAME_TIMESTAMP_SUFFIX, '').trim()
+
+  return stripped || normalized
 }

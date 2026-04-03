@@ -4,7 +4,7 @@ import type { ApiMenuData } from '@/components/ApiMenu'
 import { ApiStatus, BodyType, ContentType, HttpMethod, MenuItemType, ParamType } from '@/enums'
 import type { ApiDetails, Parameter } from '@/types'
 
-import { mapContentType, parseDocumentFromFile } from './document-import-utils'
+import { mapContentType, parseDocumentFromFile, stripImportedTimestampSuffix } from './document-import-utils'
 import { inferJsonSchemaFromExample } from './json-schema-from-example'
 import {
   buildPostmanVariableMap,
@@ -290,13 +290,14 @@ function appendCollectionItems(
 
     if (children) {
       const folderId = randomUUID()
+      const folderName = resolvePostmanTemplate(
+        getPostmanText(item.name) ?? `${DEFAULT_FOLDER_NAME} ${index + 1}`,
+        itemVariables,
+      )
       menuItems.push({
         id: folderId,
         parentId,
-        name: resolvePostmanTemplate(
-          getPostmanText(item.name) ?? `${DEFAULT_FOLDER_NAME} ${index + 1}`,
-          itemVariables,
-        ),
+        name: stripImportedTimestampSuffix(folderName),
         type: MenuItemType.ApiDetailFolder,
       })
       appendCollectionItems(children, folderId, menuItems, itemVariables)
@@ -324,12 +325,13 @@ export function importPostmanCollectionDocumentToMenuItems(doc: Record<string, u
   const info = isPostmanRecord(doc.info) ? doc.info : undefined
   const rootId = randomUUID()
   const rootVariables = buildPostmanVariableMap(doc.variable)
+  const rootName = resolvePostmanTemplate(
+    getPostmanText(info?.name) ?? DEFAULT_COLLECTION_NAME,
+    rootVariables,
+  )
   const menuItems: ApiMenuData[] = [{
     id: rootId,
-    name: resolvePostmanTemplate(
-      getPostmanText(info?.name) ?? DEFAULT_COLLECTION_NAME,
-      rootVariables,
-    ),
+    name: stripImportedTimestampSuffix(rootName),
     type: MenuItemType.ApiDetailFolder,
   }]
 
