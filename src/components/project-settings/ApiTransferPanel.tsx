@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
-
-import { Button, Progress, Space, Typography, message, theme } from 'antd'
 import { useLocation } from 'react-router'
 
-import { useMenuHelpersContext } from '@/contexts/menu-helpers'
+import { Button, Input, message, Progress, Space, theme, Typography } from 'antd'
 
-interface ImportPayload {
+import { type ProjectStateSnapshot, useMenuHelpersContext } from '@/contexts/menu-helpers'
+
+interface ImportApiResponse {
   ok: boolean
+  data: ProjectStateSnapshot | null
   error: string | null
 }
 
@@ -18,6 +19,7 @@ interface UploadApiFileOptions {
 
 function resolveProjectId(pathname: string) {
   const parts = pathname.split('/').filter(Boolean)
+
   return parts.at(0) === 'projects' ? parts.at(1) : undefined
 }
 
@@ -34,6 +36,7 @@ function pickImportFile(onSelect: (file: File) => void) {
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = '.json,.yaml,.yml'
+
   input.onchange = () => {
     const file = input.files?.item(0)
 
@@ -41,19 +44,50 @@ function pickImportFile(onSelect: (file: File) => void) {
       onSelect(file)
     }
   }
+
   input.click()
+}
+
+async function importApiDocumentFromUrl(
+  projectId: string,
+  url: string,
+): Promise<ImportApiResponse> {
+  const response = await fetch(`/api/v1/projects/${projectId}/imports`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ url }),
+  })
+
+  let payload: ImportApiResponse
+
+  try {
+    payload = await response.json() as ImportApiResponse
+  }
+  catch {
+    throw new Error('导入失败：服务端返回异常')
+  }
+
+  if (response.ok && payload.ok) {
+    return payload
+  }
+
+  throw new Error(payload.error ?? '导入失败')
 }
 
 function uploadApiFile(props: UploadApiFileOptions) {
   const { projectId, file, onProgress } = props
 
-  return new Promise<ImportPayload>((resolve, reject) => {
+  return new Promise<ImportApiResponse>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     const formData = new FormData()
     formData.append('file', file)
 
     xhr.open('POST', `/api/v1/projects/${projectId}/imports`)
     xhr.withCredentials = true
+
     xhr.upload.onprogress = (event) => {
       if (!event.lengthComputable) {
         return
@@ -62,15 +96,18 @@ function uploadApiFile(props: UploadApiFileOptions) {
       const percent = Math.min(99, Math.round((event.loaded / event.total) * 100))
       onProgress(percent)
     }
+
     xhr.onerror = () => {
       reject(new Error('网络异常，请稍后重试'))
     }
+
     xhr.onload = () => {
       try {
-        const payload = JSON.parse(xhr.responseText) as ImportPayload
+        const payload = JSON.parse(xhr.responseText) as ImportApiResponse
 
         if (xhr.status >= 200 && xhr.status < 300) {
           resolve(payload)
+
           return
         }
 
@@ -88,17 +125,20 @@ function uploadApiFile(props: UploadApiFileOptions) {
 export function ApiTransferPanel() {
   const { token } = theme.useToken()
   const { pathname } = useLocation()
-  const { reloadState } = useMenuHelpersContext()
+  const { applyServerState, reloadState } = useMenuHelpersContext()
   const [msgApi, contextHolder] = message.useMessage()
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   const [importFileName, setImportFileName] = useState<string>()
+  const [importUrl, setImportUrl] = useState('')
+  const [isUrlImporting, setIsUrlImporting] = useState(false)
 
   const projectId = useMemo(() => resolveProjectId(pathname), [pathname])
 
   const handleExport = async (format: 'json' | 'yaml') => {
     if (!projectId) {
       msgApi.error('请在项目页面执行导出')
+
       return
     }
 
@@ -109,6 +149,7 @@ export function ApiTransferPanel() {
 
     if (!response.ok) {
       msgApi.error('导出失败')
+
       return
     }
 
@@ -118,6 +159,7 @@ export function ApiTransferPanel() {
   const handleImport = async (file: File) => {
     if (!projectId) {
       msgApi.error('请在项目页面执行导入')
+
       return
     }
 
@@ -145,9 +187,15 @@ export function ApiTransferPanel() {
         throw new Error(payload.error ?? '导入失败')
       }
 
+      if (payload.data) {
+        applyServerState(payload.data)
+      }
+      else {
+        await reloadState()
+      }
+
       setImportProgress(100)
       msgApi.open({ key: 'api-import', type: 'success', content: '导入成功，已合并到当前项目' })
-      await reloadState()
     }
     catch (error) {
       msgApi.open({
@@ -158,6 +206,65 @@ export function ApiTransferPanel() {
     }
     finally {
       setIsImporting(false)
+    }
+  }
+
+  const handleImportFromUrl = async () => {
+    if (!projectId) {
+      msgApi.error('请在项目页面执行导入')
+
+      return
+    }
+
+    const trimmed = importUrl.trim()
+
+    if (!trimmed) {
+      msgApi.error('请填写 OpenAPI 或 Postman 文档的 URL')
+
+      return
+    }
+
+    let parsed: URL
+
+    try {
+      parsed = new URL(trimmed)
+    }
+    catch {
+      msgApi.error('链接格式不正确')
+
+      return
+    }
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      msgApi.error('仅支持 http 或 https 链接')
+
+      return
+    }
+
+    setIsUrlImporting(true)
+    msgApi.open({ key: 'api-import-url', type: 'loading', content: '正在从链接拉取并导入…', duration: 0 })
+
+    try {
+      const payload = await importApiDocumentFromUrl(projectId, trimmed)
+
+      if (payload.data) {
+        applyServerState(payload.data)
+      }
+      else {
+        await reloadState()
+      }
+
+      msgApi.open({ key: 'api-import-url', type: 'success', content: '导入成功，已合并到当前项目' })
+    }
+    catch (error) {
+      msgApi.open({
+        key: 'api-import-url',
+        type: 'error',
+        content: error instanceof Error ? error.message : '导入失败',
+      })
+    }
+    finally {
+      setIsUrlImporting(false)
     }
   }
 
@@ -175,14 +282,40 @@ export function ApiTransferPanel() {
           导入后会静默合并到当前项目里的接口、请求目录与模型数据，不会清空已有内容。
         </Typography.Paragraph>
         <Typography.Paragraph className="!mb-4" type="secondary">
-          选择文件后会直接开始导入，不再弹出覆盖确认。
+          选择文件或从 URL 导入后会直接开始合并，不再弹出覆盖确认。URL 需可被本服务访问（例如本机后端请使用局域网 IP 或主机名，勿写浏览器专属地址）。
         </Typography.Paragraph>
 
-        <Space direction="vertical" size={12}>
+        <Space className="w-full max-w-2xl" direction="vertical" size={12}>
+          <div>
+            <Typography.Text className="mb-2 block text-sm" type="secondary">
+              通过文档链接导入（GET 返回 JSON 或 YAML 正文，如 SpringDoc 的 /v3/api-docs）
+            </Typography.Text>
+            <Space.Compact className="w-full">
+              <Input
+                allowClear
+                disabled={isImporting || isUrlImporting}
+                placeholder="https://example.com/v3/api-docs"
+                value={importUrl}
+                onChange={(e) => { setImportUrl(e.target.value) }}
+                onPressEnter={() => {
+                  void handleImportFromUrl()
+                }}
+              />
+              <Button
+                disabled={isImporting || isUrlImporting}
+                loading={isUrlImporting}
+                type="primary"
+                onClick={() => void handleImportFromUrl()}
+              >
+                从 URL 导入
+              </Button>
+            </Space.Compact>
+          </div>
+
           <Button
-            type="primary"
+            disabled={isImporting || isUrlImporting}
             loading={isImporting}
-            disabled={isImporting}
+            type="primary"
             onClick={() => {
               pickImportFile((file) => {
                 void handleImport(file)

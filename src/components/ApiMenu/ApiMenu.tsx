@@ -1,13 +1,16 @@
+import { useCallback, useState } from 'react'
 import { useEvent } from 'react-use-event-hook'
+
+import { Button, ConfigProvider, Modal, Space, Tree, type TreeProps } from 'antd'
 import useResizeObserver from 'use-resize-observer'
 
-import { ConfigProvider, Tree, type TreeProps } from 'antd'
-
+import type { ApiMenuData } from '@/components/ApiMenu'
 import { API_MENU_CONFIG } from '@/configs/static'
 import { useMenuHelpersContext } from '@/contexts/menu-helpers'
 import { CatalogType, MenuItemType } from '@/enums'
-import { isMenuSameGroup, isTopMenuType } from '@/helpers'
+import { isMenuSameGroup } from '@/helpers'
 import { useStyles } from '@/hooks/useStyle'
+import type { TabContentType } from '@/types'
 
 import { useMenuTabContext, useMenuTabHelpers } from '../../contexts/menu-tab-settings'
 import { PageTabStatus } from '../ApiTab/ApiTab.enum'
@@ -20,6 +23,19 @@ import { css } from '@emotion/css'
 
 type TreeOnSelect = NonNullable<TreeProps['onSelect']>
 
+function toDeletableMenuIds(
+  rawKeys: React.Key[],
+  menuRawList: ApiMenuData[] | undefined,
+): string[] {
+  if (!menuRawList?.length) {
+    return []
+  }
+
+  const valid = new Set(menuRawList.map((m) => m.id))
+
+  return rawKeys.filter((k): k is string => typeof k === 'string' && valid.has(k))
+}
+
 const TREE_MIN_VIEWPORT_HEIGHT = 240
 
 /**
@@ -30,12 +46,14 @@ const TREE_MIN_VIEWPORT_HEIGHT = 240
  * - 文件夹可以包含文件和另一个文件夹，包含的关系以层级递进的形式展示。
  */
 export function ApiMenu() {
-  const { moveMenuItem } = useMenuHelpersContext()
+  const { moveMenuItem, menuRawList, removeMenuItems } = useMenuHelpersContext()
   const { expandedMenuKeys, addExpandedMenuKeys, removeExpandedMenuKeys, menuTree }
     = useApiMenuContext()
 
   const { tabItems, activeTabKey } = useMenuTabContext()
-  const { activeTabItem, addTabItem } = useMenuTabHelpers()
+  const { activeTabItem, addTabItem, removeTabItem } = useMenuTabHelpers()
+  const [batchMode, setBatchMode] = useState(false)
+  const [checkedKeys, setCheckedKeys] = useState<React.Key[]>([])
   const { ref: treeContainerRef, height: treeContainerHeight } = useResizeObserver<HTMLDivElement>()
 
   const selectedKeys = activeTabKey ? [activeTabKey] : undefined
@@ -53,7 +71,49 @@ export function ApiMenu() {
     }
   })
 
+  const exitBatchMode = useCallback(() => {
+    setBatchMode(false)
+    setCheckedKeys([])
+  }, [])
+
+  const handleBatchDelete = useCallback(() => {
+    const ids = toDeletableMenuIds(checkedKeys, menuRawList)
+
+    if (ids.length === 0) {
+      Modal.warning({ title: '请选择要删除的菜单项（接口、目录、模型等）' })
+
+      return
+    }
+
+    Modal.confirm({
+      title: `确定删除所选的 ${ids.length} 项？`,
+      content: '目录会连同子项一并删除，并进入回收站（30 天内可恢复）。',
+      okText: '删除',
+      okButtonProps: { danger: true },
+      maskClosable: true,
+      onOk: async () => {
+        try {
+          await removeMenuItems(ids)
+          ids.forEach((key) => {
+            removeTabItem({ key })
+          })
+          exitBatchMode()
+        }
+        catch (error) {
+          Modal.error({
+            title: '批量删除失败',
+            content: error instanceof Error ? error.message : '请稍后重试',
+          })
+        }
+      },
+    })
+  }, [checkedKeys, exitBatchMode, menuRawList, removeMenuItems, removeTabItem])
+
   const handleMenuSelect = useEvent<TreeOnSelect>((_, { node }) => {
+    if (batchMode) {
+      return
+    }
+
     const menuId = node.key
 
     if (typeof menuId === 'string') {
@@ -63,13 +123,13 @@ export function ApiMenu() {
         activeTabItem({ key: menuId })
       }
       else {
-        if (menuId === CatalogType.Overview || menuId === CatalogType.Recycle) {
-          const { title } = API_MENU_CONFIG[menuId]
+        if ([CatalogType.Overview, CatalogType.Recycle].includes(menuId as CatalogType)) {
+          const { title } = API_MENU_CONFIG[menuId as CatalogType]
 
           addTabItem({
             key: menuId,
             label: title,
-            contentType: menuId,
+            contentType: menuId as TabContentType,
           })
         }
         else {
@@ -119,6 +179,10 @@ export function ApiMenu() {
   }))
 
   const handleDrop: TreeProps['onDrop'] = (info) => {
+    if (batchMode) {
+      return
+    }
+
     const dropKey = info.node.key
     const dragKey = info.dragNode.key
     const dropPos = info.node.pos.split('-')
@@ -131,6 +195,10 @@ export function ApiMenu() {
     ) {
       moveMenuItem({ dragKey, dropKey, dropPosition })
     }
+  }
+
+  const handleTreeCheck: TreeProps['onCheck'] = (keys) => {
+    setCheckedKeys(Array.isArray(keys) ? keys : keys.checked)
   }
 
   return (
@@ -147,63 +215,104 @@ export function ApiMenu() {
         },
       }}
     >
-      <div ref={treeContainerRef} className="h-full overflow-hidden">
-        {!!menuTree && (
-          <Tree.DirectoryTree
-            blockNode
-            showIcon
-            allowDrop={({ dragNode, dropNode }) => {
-              if (dropNode.className?.includes('top-folder')) {
-                return false
-              }
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 px-1">
+          <Space wrap size={8}>
+            <Button
+              size="small"
+              type={batchMode ? 'primary' : 'default'}
+              onClick={() => {
+                if (batchMode) {
+                  exitBatchMode()
+                }
+                else {
+                  setBatchMode(true)
+                  setCheckedKeys([])
+                }
+              }}
+            >
+              {batchMode ? '退出批量' : '批量选择'}
+            </Button>
+            {batchMode && (
+              <Button danger size="small" type="primary" onClick={handleBatchDelete}>
+                删除所选（{toDeletableMenuIds(checkedKeys, menuRawList).length}）
+              </Button>
+            )}
+          </Space>
+        </div>
+        <div ref={treeContainerRef} className="min-h-0 flex-1 overflow-hidden">
+          {!!menuTree && (
+            <Tree.DirectoryTree
+              blockNode
+              showIcon
+              allowDrop={({ dragNode, dropNode }) => {
+                if (batchMode) {
+                  return false
+                }
 
-              return isMenuSameGroup(
-                (dragNode as CatalogDataNode).customData.catalog,
-                (dropNode as CatalogDataNode).customData.catalog,
-              )
-            }}
-            draggable={{
-              icon: false,
-              nodeDraggable: (node) => {
-                return !node.className?.includes('top-folder')
-              },
-            }}
-            expandedKeys={expandedMenuKeys}
-            height={treeViewportHeight}
-            rootClassName={styles.menuTree}
-            selectedKeys={selectedKeys}
-            switcherIcon={(node) => {
-              const nodeData = node.data as CatalogDataNode | undefined
-              const hasChildren = nodeData?.children?.length
+                if (dropNode.className?.includes('top-folder')) {
+                  return false
+                }
 
-              if (hasChildren) {
-                return (
-                  <SwitcherIcon
-                    onClick={() => {
-                      const menuId = nodeData.key
-
-                      if (typeof menuId === 'string') {
-                        switchExpandedKeys(menuId)
-                      }
-                    }}
-                  />
+                return isMenuSameGroup(
+                  (dragNode as CatalogDataNode).customData.catalog,
+                  (dropNode as CatalogDataNode).customData.catalog,
                 )
+              }}
+              checkable={batchMode}
+              checkedKeys={batchMode ? checkedKeys : undefined}
+              draggable={
+                batchMode
+                  ? false
+                  : {
+                      icon: false,
+                      nodeDraggable: (node) => {
+                        return !node.className?.includes('top-folder')
+                      },
+                    }
               }
+              expandedKeys={expandedMenuKeys}
+              height={treeViewportHeight}
+              rootClassName={styles.menuTree}
+              selectedKeys={selectedKeys}
+              switcherIcon={(node) => {
+                const nodeData = node.data as CatalogDataNode | undefined
+                const hasChildren = nodeData?.children?.length
 
-              return null
-            }}
-            treeData={menuTree}
-            onDrop={handleDrop}
-            onDoubleClick={(_, node) => {
-              const menuId = node.key
+                if (hasChildren) {
+                  return (
+                    <SwitcherIcon
+                      onClick={() => {
+                        const menuId = nodeData.key
 
-              if (typeof menuId === 'string' && !node.isLeaf) {
-                switchExpandedKeys(menuId)
-              }
-            }}
-            onSelect={handleMenuSelect}
-          />
-        )}
+                        if (typeof menuId === 'string') {
+                          switchExpandedKeys(menuId)
+                        }
+                      }}
+                    />
+                  )
+                }
+
+                return null
+              }}
+              treeData={menuTree}
+              onCheck={batchMode ? handleTreeCheck : undefined}
+              onDoubleClick={(_, node) => {
+                if (batchMode) {
+                  return
+                }
+
+                const menuId = node.key
+
+                if (typeof menuId === 'string' && !node.isLeaf) {
+                  switchExpandedKeys(menuId)
+                }
+              }}
+              onDrop={handleDrop}
+              onSelect={handleMenuSelect}
+            />
+          )}
+        </div>
       </div>
     </ConfigProvider>
   )

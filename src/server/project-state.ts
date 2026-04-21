@@ -6,7 +6,6 @@ import { CatalogType, MenuItemType } from '@/enums'
 import { getCatalogType, isMenuFolder } from '@/helpers'
 import type { ApiEnvironment, ProjectEnvironmentConfig, RecycleData, RecycleDataItem } from '@/types'
 
-import { RECYCLE_TTL_MS } from './constants'
 import {
   clearExpiredRecycleItems,
   deleteMenuItems,
@@ -18,11 +17,12 @@ import {
   insertRecycleItem,
   listMenuItems,
   listRecycleItems,
+  type RecycleItemRow,
   runInTransaction,
   updateMenuItem,
   updateMenuSortOrder,
-  type RecycleItemRow,
 } from './db/menu-repo'
+import { RECYCLE_TTL_MS } from './constants'
 import { listProjectEnvironmentConfig } from './project-environments'
 
 interface StateSnapshot {
@@ -194,6 +194,7 @@ function sortParsedRecycleItems(items: ParsedRecycleItem[]) {
     const depth = parentId && itemByDeletedId.has(parentId) ? getDepth(parentId) + 1 : 0
     visiting.delete(itemId)
     depthCache.set(itemId, depth)
+
     return depth
   }
 
@@ -312,6 +313,24 @@ export function patchProjectMenuItem(
   return getProjectState(projectId)
 }
 
+function filterRedundantChildSelections(menuIds: string[], list: ApiMenuData[]) {
+  const selected = new Set(menuIds)
+
+  return menuIds.filter((id) => {
+    let parentId = list.find((item) => item.id === id)?.parentId
+
+    while (parentId) {
+      if (selected.has(parentId)) {
+        return false
+      }
+
+      parentId = list.find((item) => item.id === parentId)?.parentId
+    }
+
+    return true
+  })
+}
+
 export function removeProjectMenuItem(payload: {
   projectId: string
   menuId: string
@@ -348,6 +367,75 @@ export function removeProjectMenuItem(payload: {
     })
 
     deleteMenuItems({ projectId: payload.projectId, ids: relatedIds })
+  })
+
+  return getProjectState(payload.projectId)
+}
+
+export function removeProjectMenuItemsBatch(payload: {
+  projectId: string
+  menuIds: string[]
+  actor: { id: string, username: string }
+}) {
+  if (payload.menuIds.length === 0) {
+    return getProjectState(payload.projectId)
+  }
+
+  runInTransaction(() => {
+    const list = listMenuItems(payload.projectId).map(toMenuData)
+    const knownIds = new Set(list.map((item) => item.id))
+    const requested = payload.menuIds.filter((id) => knownIds.has(id))
+
+    if (requested.length === 0) {
+      return
+    }
+
+    const roots = filterRedundantChildSelections(requested, list)
+    const allRelatedIds = new Set<string>()
+    const itemsToRecycle: ApiMenuData[] = []
+
+    for (const menuId of roots) {
+      const relatedIds = collectDescendantIds(list, menuId)
+
+      for (const rid of relatedIds) {
+        if (allRelatedIds.has(rid)) {
+          continue
+        }
+
+        allRelatedIds.add(rid)
+        const item = list.find((i) => i.id === rid)
+
+        if (item) {
+          itemsToRecycle.push(item)
+        }
+      }
+    }
+
+    if (allRelatedIds.size === 0) {
+      return
+    }
+
+    const expiresAt = Date.now() + RECYCLE_TTL_MS
+    const creator = {
+      id: payload.actor.id,
+      name: payload.actor.username,
+      username: payload.actor.username,
+    }
+
+    itemsToRecycle.forEach((item) => {
+      const catalogType = getCatalogType(item.type)
+      const normalizedType = catalogType === CatalogType.Markdown ? CatalogType.Http : catalogType
+
+      insertRecycleItem({
+        projectId: payload.projectId,
+        catalogType: normalizedType,
+        creatorJson: JSON.stringify(creator),
+        deletedItemJson: JSON.stringify(item),
+        expiresAt,
+      })
+    })
+
+    deleteMenuItems({ projectId: payload.projectId, ids: [...allRelatedIds] })
   })
 
   return getProjectState(payload.projectId)

@@ -1,5 +1,4 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-
 import { useLocation } from 'react-router'
 
 import type { ApiMenuData } from '@/components/ApiMenu'
@@ -17,6 +16,7 @@ import type {
 interface MenuHelpers {
   addMenuItem: (menuData: ApiMenuData) => void
   removeMenuItem: (menuData: Pick<ApiMenuData, 'id'>) => void
+  removeMenuItems: (menuIds: ApiMenuData['id'][]) => Promise<void>
   updateMenuItem: (menuData: Partial<ApiMenuData> & Pick<ApiMenuData, 'id'>) => void
   restoreMenuItem: (menuData: { restoreId: RecycleDataItem['id'] }) => void
   restoreMenuItems: (recycleIds: RecycleDataItem['id'][]) => void
@@ -27,6 +27,8 @@ interface MenuHelpers {
     dropPosition: 0 | -1 | 1
   }) => void
   updateProjectEnvironmentConfig: (config: ProjectEnvironmentConfig) => Promise<void>
+  /** 将服务端返回的快照写入界面（如导入接口返回的 data），避免仅依赖二次 GET */
+  applyServerState: (state: ProjectStateSnapshot) => void
   reloadState: () => Promise<void>
 }
 
@@ -45,12 +47,14 @@ interface MenuHelpersContextData extends MenuHelpers {
   >
 }
 
-interface StatePayload {
+export interface ProjectStateSnapshot {
   menuRawList: ApiMenuData[]
   recyleRawData: RecycleData
   projectEnvironments: ApiEnvironment[]
   projectEnvironmentConfig: ProjectEnvironmentConfig
 }
+
+type StatePayload = ProjectStateSnapshot
 
 interface ApiResult<T> {
   ok: boolean
@@ -93,7 +97,7 @@ function normalizeEnvironmentConfigShape(input: unknown): ProjectEnvironmentConf
 function normalizeStatePayload(state: StatePayload): StatePayload {
   return {
     ...state,
-    projectEnvironments: state.projectEnvironments ?? [],
+    projectEnvironments: Array.isArray(state.projectEnvironments) ? state.projectEnvironments : [],
     projectEnvironmentConfig: normalizeEnvironmentConfigShape(state.projectEnvironmentConfig),
   }
 }
@@ -101,9 +105,11 @@ function normalizeStatePayload(state: StatePayload): StatePayload {
 function readCachedState(projectId: string): StatePayload | undefined {
   try {
     const raw = window.sessionStorage.getItem(getStateCacheKey(projectId))
+
     if (!raw) {
       return undefined
     }
+
     return normalizeStatePayload(JSON.parse(raw) as StatePayload)
   }
   catch {
@@ -133,6 +139,7 @@ function writeCachedEnvironmentId(projectId: string, environmentId?: string) {
   try {
     if (environmentId) {
       window.localStorage.setItem(getEnvironmentCacheKey(projectId), environmentId)
+
       return
     }
 
@@ -175,6 +182,7 @@ export function MenuHelpersContextProvider(props: React.PropsWithChildren) {
     setRecyleRawData(normalizedState.recyleRawData)
     setProjectEnvironments(normalizedState.projectEnvironments)
     setProjectEnvironmentConfig(normalizedState.projectEnvironmentConfig)
+
     if (projectId) {
       writeCachedState(projectId, normalizedState)
     }
@@ -197,12 +205,17 @@ export function MenuHelpersContextProvider(props: React.PropsWithChildren) {
     [applyState],
   )
 
+  const applyServerState = useCallback((state: ProjectStateSnapshot) => {
+    applyState(state)
+  }, [applyState])
+
   const reloadState = useCallback(async () => {
     if (!projectId) {
       setMenuRawList(undefined)
       setRecyleRawData(undefined)
       setProjectEnvironments([])
       setProjectEnvironmentConfig(EMPTY_PROJECT_ENVIRONMENT_CONFIG)
+
       return
     }
 
@@ -217,17 +230,21 @@ export function MenuHelpersContextProvider(props: React.PropsWithChildren) {
   useEffect(() => {
     if (projectId) {
       const cachedState = readCachedState(projectId)
+
       if (cachedState) {
         applyState(cachedState)
       }
+
       setCurrentProjectEnvironmentId(readCachedEnvironmentId(projectId))
     }
+
     void reloadState()
   }, [applyState, projectId, reloadState])
 
   useEffect(() => {
     if (!projectId) {
       setCurrentProjectEnvironmentId(undefined)
+
       return
     }
 
@@ -236,6 +253,7 @@ export function MenuHelpersContextProvider(props: React.PropsWithChildren) {
 
       if (exists) {
         writeCachedEnvironmentId(projectId, currentProjectEnvironmentId)
+
         return
       }
     }
@@ -249,6 +267,7 @@ export function MenuHelpersContextProvider(props: React.PropsWithChildren) {
     const guardProject = () => {
       if (!projectId) {
         console.error(new Error('当前不在项目页面'))
+
         return undefined
       }
 
@@ -266,47 +285,67 @@ export function MenuHelpersContextProvider(props: React.PropsWithChildren) {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recycleIds }),
-      }).catch((error) => {
+      }).catch((error: unknown) => {
         console.error(error)
       })
     }
 
     return {
+      applyServerState,
       reloadState,
       addMenuItem: (menuData) => {
         const id = guardProject()
+
         if (!id) {
           return
         }
+
         void requestState(`/api/v1/projects/${id}/menu-items`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(menuData),
-        }).catch((error) => {
+        }).catch((error: unknown) => {
           console.error(error)
         })
       },
       removeMenuItem: ({ id: menuId }) => {
         const id = guardProject()
+
         if (!id) {
           return
         }
+
         void requestState(`/api/v1/projects/${id}/menu-items/${menuId}`, {
           method: 'DELETE',
-        }).catch((error) => {
+        }).catch((error: unknown) => {
           console.error(error)
+        })
+      },
+      removeMenuItems: async (menuIds) => {
+        const id = guardProject()
+
+        if (!id || menuIds.length === 0) {
+          return
+        }
+
+        await requestState(`/api/v1/projects/${id}/menu-items/batch-delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ menuIds }),
         })
       },
       updateMenuItem: ({ id: menuId, ...rest }) => {
         const id = guardProject()
+
         if (!id) {
           return
         }
+
         void requestState(`/api/v1/projects/${id}/menu-items/${menuId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(rest),
-        }).catch((error) => {
+        }).catch((error: unknown) => {
           console.error(error)
         })
       },
@@ -321,22 +360,26 @@ export function MenuHelpersContextProvider(props: React.PropsWithChildren) {
       },
       moveMenuItem: ({ dragKey, dropKey, dropPosition }) => {
         const id = guardProject()
+
         if (!id) {
           return
         }
+
         void requestState(`/api/v1/projects/${id}/menu-items/move`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dragKey, dropKey, dropPosition }),
-        }).catch((error) => {
+        }).catch((error: unknown) => {
           console.error(error)
         })
       },
       updateProjectEnvironmentConfig: async (config) => {
         const id = guardProject()
+
         if (!id) {
           return
         }
+
         await requestState(`/api/v1/projects/${id}/environments`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -344,7 +387,7 @@ export function MenuHelpersContextProvider(props: React.PropsWithChildren) {
         })
       },
     }
-  }, [projectId, reloadState, requestState])
+  }, [applyServerState, projectId, reloadState, requestState])
 
   return (
     <MenuHelpersContext.Provider

@@ -56,6 +56,10 @@ export default [
     'app/api/v1/projects/[projectId]/menu-items/move/route.ts',
   ),
   route(
+    'api/v1/projects/:projectId/menu-items/batch-delete',
+    'app/api/v1/projects/[projectId]/menu-items/batch-delete/route.ts',
+  ),
+  route(
     'api/v1/projects/:projectId/recycle',
     'app/api/v1/projects/[projectId]/recycle/route.ts',
   ),
